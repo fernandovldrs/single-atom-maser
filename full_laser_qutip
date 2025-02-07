@@ -1,0 +1,120 @@
+import qutip
+from qutip.solver import Options
+import matplotlib.pyplot as plt
+import numpy as np
+from multiprocessing import Pool
+import imageio
+from qutip import wigner
+
+import time
+start_time = time.time()
+# Simulation parameters
+res_trunc = 40
+aux_trunc = 2
+transmon_trunc = 3
+# t_sim = 20000 
+# timestep = 1
+# t_list = np.arange(0, t_sim, timestep)
+
+# Destruction operators
+a = qutip.destroy(res_trunc)
+b = qutip.destroy(aux_trunc)
+sge = qutip.Qobj(np.array([[0, 1, 0], [0, 0, 0], [0,0,0]]))
+sef = qutip.Qobj(np.array([[0, 0, 0], [0, 0, 1], [0,0,0]]))
+
+a = qutip.tensor(a, qutip.qeye(aux_trunc), qutip.qeye(transmon_trunc))
+b = qutip.tensor(qutip.qeye(res_trunc), b, qutip.qeye(transmon_trunc))
+sge = qutip.tensor(qutip.qeye(res_trunc), qutip.qeye(aux_trunc), sge)
+sef = qutip.tensor(qutip.qeye(res_trunc), qutip.qeye(aux_trunc), sef)
+
+# System parameters
+g_res = 6.5e-3 # 10MHz
+g_aux = 23.5e-3 # 30MHz
+omega_gf2 = 25e-3 # 20MHz
+kappa_res = 0.01e-3# 0.31e-3 # T1 = 100us
+kappa_aux = 138e-3 # T1 = 300ns
+
+# Coherent dynamics
+H = g_res*(a.dag()*sge + a*sge.dag()) 
+H += g_aux*(b.dag()*sef + b*sef.dag()) 
+H += omega_gf2*(sge*sef + sef.dag()*sge.dag())
+
+# Losses
+c_ops = [np.sqrt(kappa_res) * a, np.sqrt(kappa_aux) * b]
+
+# def run_simulation(t_sim):
+t_sim = 10000
+timestep = 1
+t_list = np.arange(0, t_sim, timestep)
+
+# Simulation
+initial_state = qutip.tensor(qutip.basis(res_trunc, 0), 
+                                qutip.basis(aux_trunc, 0), 
+                                qutip.basis(transmon_trunc, 0))
+
+result = qutip.mcsolve(H, initial_state, t_list, c_ops = c_ops, options=Options(nsteps=4000))
+final_state = result.states[-1]
+
+mean_n = (a.dag()*a*final_state).tr()
+mean_n_squared = qutip.expect((a.dag()*a)**2, final_state)
+variance_n = mean_n_squared - mean_n**2
+# fano_number = variance_n / mean_n
+
+# print(mean_n, fano_number)
+
+fig, ax = plt.subplots(1, 2, figsize = (10*0.9,5*0.9), constrained_layout=True)
+final_state = final_state.unit()
+photon_distribution = []
+for level in range(res_trunc):
+    proj = qutip.tensor(qutip.basis(res_trunc, level)*qutip.basis(res_trunc, level).dag(), 
+                        qutip.qeye(aux_trunc),
+                        qutip.qeye(transmon_trunc)) 
+    level_pop = (proj*final_state).tr()
+    photon_distribution.append(level_pop)
+
+x = np.linspace(-10, 10, 301)
+p = np.linspace(-10, 10, 301)
+W_t = wigner(final_state.ptrace(0), x, p)
+
+font_size = 16
+border_linewidth = 2
+
+ax[0].bar(range(res_trunc), photon_distribution, color='blue', alpha=0.7)
+ax[0].set_title(r"Photon number distribution", fontsize=font_size)
+ax[0].set_xlabel(r"Fock state", fontsize=font_size)
+ax[0].set_ylabel(r"Population", fontsize=font_size)
+ax[0].set_ylim([0.0, 1.0])
+extremety = max([np.abs(np.max(W_t)), np.abs(np.min(W_t))])
+ax[1].pcolormesh(x, p, W_t.T, cmap = "bwr", vmin = -extremety, vmax = extremety)
+ax[1].set_title(r"Wigner function", fontsize=font_size)
+ax[1].set_xlabel(r'Re[$\beta$]', fontsize=font_size)
+ax[1].set_ylabel(r'Im[$\beta$]', fontsize=font_size)
+ax[0].tick_params(axis='both', width=border_linewidth, labelsize=font_size, direction='in', length=8)
+ax[1].tick_params(axis='both', width=border_linewidth, labelsize=font_size, direction='in', length=8)
+
+# Enable and set the colorbar spine linewidths and colors
+
+for axis in ax:
+    for spine in axis.spines.values():
+        spine.set_visible(True)  # Make spines visible
+        spine.set_linewidth(border_linewidth)  # Set linewidth
+        spine.set_color('black')  # Set color of the spines (optional, can customize)
+
+# plt.legend()
+filename = f'C:\\Users\\admin\\Documents\\single-atom-maser\\final_state_{int(t_sim)}.png'
+plt.savefig(filename, dpi=150, bbox_inches='tight')
+
+
+# return result.states
+
+
+# run_simulation(1e3)
+print(time.time()-start_time)
+# if __name__ == "__main__":
+
+#     t_sim_list = [20]#, 5e3, 10e3, 15e3, 20e3]
+#     pool = Pool(processes=1)  # Adjust the number of processes based on your CPU
+#     results = pool.map(run_simulation, t_sim_list)
+#     pool.close()
+#     pool.join()
+
