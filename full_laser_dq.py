@@ -7,7 +7,7 @@ import jax.numpy as jnp
 start_time = time.time()
 
 # Simulation parameters
-res_trunc = 75
+res_trunc = 50
 aux_trunc = 2
 transmon_trunc = 3
 
