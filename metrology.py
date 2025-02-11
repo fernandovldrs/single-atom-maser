@@ -7,43 +7,40 @@ import jax.numpy as jnp
 start_time = time.time()
 
 # Simulation parameters
-res_trunc = 20
+res_trunc = 50
 aux_trunc = 2
 transmon_trunc = 3
 
-t_sim = 20000
-timestep = 4
+t_sim = 40000
+timestep = 2
 t_list = jnp.arange(0, t_sim, timestep)
 
 # Create destruction operators
 a = dq.operators.destroy(res_trunc)
 b = dq.operators.destroy(aux_trunc)
-c = dq.operators.destroy(transmon_trunc)
+
+# Define ladder operators for the transmon
+sge = dq.asqarray([[0, 1, 0], [0, 0, 0], [0, 0, 0]])
+sef = dq.asqarray([[0, 0, 0], [0, 0, 1], [0, 0, 0]])
 
 # Tensor product to match system dimensions
 a = dq.tensor(a, dq.eye(aux_trunc), dq.eye(transmon_trunc))
 b = dq.tensor(dq.eye(res_trunc), b, dq.eye(transmon_trunc))
-c = dq.tensor(dq.eye(res_trunc), dq.eye(aux_trunc), c)
+sge = dq.tensor(dq.eye(res_trunc), dq.eye(aux_trunc), sge)
+sef = dq.tensor(dq.eye(res_trunc), dq.eye(aux_trunc), sef)
 
 # System parameters
-wge = 6
-alpha = -200e-3
-waux = 5.8
-wgf2 = (wge + waux)/2 
 g_res = 6.5e-3  # 10MHz
 g_aux = 23.5e-3  # 30MHz
-omega_gf2 = 25e-3  # 20MHz
+omega_gf2 = 25e-3 #25e-3  # 20MHz
 kappa_res = 0.31e-3  # T1 = 100us
 kappa_aux = 138e-3  # T1 = 300ns
 
 # Define Hamiltonian
-H = g_res * (dq.dag(a) @ c + a @ dq.dag(c))
-H += g_aux * (dq.dag(b) @ c + b @ dq.dag(c))
-H += omega_gf2/2 * (c + dq.dag(c))
-H += (wge - wgf2) * dq.dag(a)@a
-H += (waux - wgf2) * dq.dag(b)@b
-H += (wge - wgf2) * dq.dag(c)@c + alpha/2 * dq.dag(c)@c@(dq.dag(c)@c - dq.eye(*c.dims) )
-H*= 2*jnp.pi
+H = g_res * (dq.dag(a) @ sge + a @ dq.dag(sge))
+H += g_aux * (dq.dag(b) @ sef + b @ dq.dag(sef))
+H += omega_gf2 * (sge @ sef + dq.dag(sef) @ dq.dag(sge))
+H *= 2*jnp.pi
 print(H)
 
 # Dissipation
