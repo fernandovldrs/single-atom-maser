@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from helper_fns import *
 from calculate_geff import calculate_geff
 
 # Define constants
@@ -9,10 +10,6 @@ p = 3
 w_flux_base = 2 * np.pi * 0.275
 flux_theta = 1.2*np.pi
 target_avg_f = 7.15
-
-# Define functions
-def f_scale(flux, d):
-    return np.sqrt(np.abs(np.cos(np.pi * flux) * np.sqrt(1 + d**2 * np.tan(np.pi * flux)**2)))
 
 def flux_modulation(t, A_flux1, A_flux2, d):
     flux = A_flux1 * np.cos(w_flux_base * t) + A_flux2 * np.cos(w_flux_base * p * t + flux_theta)
@@ -31,7 +28,7 @@ for i, A_flux1 in enumerate(A_flux1_vals):
     for j, A_flux2 in enumerate(A_flux2_vals):
         avg_f_map[i, j] = np.mean([flux_modulation(t, A_flux1, A_flux2, d) * f0 for t in t_list])
 
-# # Add a contour line at avg_f
+# Add a contour line at avg_f
 contour_levels = [target_avg_f]
 fig, axes = plt.subplots(1, 2)
 contour = axes[0].contour(A_flux1_vals, A_flux2_vals, avg_f_map, levels=contour_levels, colors='red', linewidths=2)

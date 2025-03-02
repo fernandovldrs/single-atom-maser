@@ -3,6 +3,75 @@ import dynamiqs as dq
 import numpy as np
 from qutip import *
 import jax.numpy as jnp
+from scipy.integrate import quad
+import matplotlib.pyplot as plt
+
+def f_scale(flux, d):
+    return np.sqrt(np.abs(np.cos(np.pi * flux) * np.sqrt(1 + d**2 * np.tan(np.pi * flux)**2)))
+
+def calc_fourier_series(f, T, N, plot = False):
+
+    T_list = np.linspace(0, T, 500)
+    f_time = np.array([f(t) for t in T_list])
+    coeffs = []
+    thetas = []
+    for k in range(N):
+        fqk_c = (2 / T) * np.trapz(f_time * np.cos(2 * np.pi * k * T_list / T), T_list)
+        fqk_s = (2 / T) * np.trapz(f_time * np.sin(2 * np.pi * k * T_list / T), T_list)
+        if k == 0 :
+            coeffs.append(fqk_c/2)
+            thetas.append(0)
+        else:
+            fqk = np.sqrt(fqk_c**2 + fqk_s**2)
+            thetak = np.arctan2(fqk_c, fqk_s) - np.pi/2
+            coeffs.append(fqk)
+            thetas.append(thetak)
+
+    if plot:
+        # Reconstruct the Fourier series and compute error
+        f_reconstructed = np.zeros_like(f_time)
+        for k in range(N):
+            f_reconstructed += coeffs[k] * np.cos(k * 2*np.pi/T * T_list + thetas[k])
+
+        error = np.abs(f_time - f_reconstructed)
+        plt.plot(f_reconstructed)
+        plt.plot(f_time)
+        plt.title(f"Approximation error: {max(error):.3f}")
+        plt.show()
+
+    return coeffs, thetas
+
+def calc_fourier_cosine_series(f, T, N, plot = False):
+    # Calculate the zeroth Fourier coefficient
+    def a0(T):
+        integral, _ = quad(f, 0, T)
+        return (1/T) * integral
+    # Calculate the nth Fourier coefficient
+    def an(n, T):
+        integral, _ = quad(lambda t, n: f(t) * np.cos(2 * np.pi * n * t / T), 0, T, args=(n,))
+        return (2/T) * integral
+    # Compute the coefficients
+    coeff = [a0(T)] + [an(n, T) for n in range(1, N+1)]
+
+    
+    if plot:
+        t_values = np.linspace(0, T, 400)
+        f_values = f(t_values)
+        f_approx = coeff[0] + sum(coeff[n] * np.cos(2 * np.pi * n * t_values / T) for n in range(1, N+1))
+        # freq_coeff = [4.62e9, 398e6, - 24.7e6, 2.38e6, -271e3, 33.7e3, - 4.42e3]
+        # f_approx2 = freq_coeff[0] + sum(freq_coeff[n] * np.cos(2 * np.pi * n * t_values / T) for n in range(1, N+1))
+
+        plt.figure(figsize=(10, 5))
+        plt.plot(t_values, f_values, label='Original function')
+        plt.plot(t_values, f_approx, label='Fourier Approximation', linestyle='--')
+        # plt.plot(t_values, f_approx2, label='Fourier Approximation2', linestyle='--')
+        plt.title('Fourier Series Approximation')
+        plt.xlabel('Time t')
+        plt.ylabel('f(t)')
+        plt.legend()
+        plt.show()
+
+    return coeff
 
 def create_qutip_ops(res_trunc, aux_trunc, transmon_trunc):
 
