@@ -230,7 +230,11 @@ class transmon:
     def build_C(self):
         
         n = self.n
-        C_tr = Qobj([[0, 1, 0],[0, 0, np.abs(n[1][2]/n[0][1])],[0, 0, 0]])
+        
+        if self.n_trunc == 4:
+            C_tr = Qobj([[0, 1, 0, 0],[0, 0, np.abs(n[1][2]/n[0][1]), 0],[0, 0, 0, np.abs(n[2][3]/n[1][2])], [0, 0, 0, 0]])
+        else:
+            C_tr = Qobj([[0, 1, 0],[0, 0, np.abs(n[1][2]/n[0][1])],[0, 0, 0]])
             
         gamma = self.gamma
         C_dis_tr = tensor(qeye(self.n_ph), np.sqrt(gamma)*C_tr, qeye(2))
