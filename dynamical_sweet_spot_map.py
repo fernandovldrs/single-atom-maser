@@ -13,16 +13,16 @@ from scipy.special import jv
 ###########################################################################
 
 
-f0 = 8.011e9 # in GHz
-d = 0.4863 # SQUID asymmetry
-p = 2
-phi_dc = 0.125 
-phi_ac = 0.75
+f0 = 8  # in GHz
+d = 0.454 # SQUID asymmetry
+p = 3
+phi_dc = 0.0
+phi_ac = 0.72801
 
 # Get the fourier series of the flux curve
 freq_curve = lambda flux: f0*f_scale(flux, d)
 T, N = 1, 10
-freq_coeff = calc_fourier_cosine_series(freq_curve, T, N, plot = True)
+freq_coeff = calc_fourier_cosine_series(freq_curve, T, N, plot = False)
 
 def analytical_f_avg(phi_dc, phi_ac, alpha, theta):
     f_bar = 0
@@ -70,10 +70,11 @@ alpha_list = np.linspace(0, 2*np.pi*0.25, 100)
 theta_list = np.linspace(0, 2*np.pi*0.5, 100)
 X, Y = np.meshgrid(alpha_list, theta_list)
 Z = decoherence(phi_dc, phi_ac, X, Y)/1e6
+Z /= 1e-9 # to match scale in the paper
 
 # Create the plot
 plt.figure(figsize=(8, 6))
-contour = plt.contourf(X/2/np.pi, Y/2/np.pi, Z, 50, cmap='terrain')  # 20 levels and a colormap
+contour = plt.contourf(X/2/np.pi, Y/2/np.pi, Z, 50, cmap='terrain',vmin=0, vmax=2.75)  # 20 levels and a colormap
 plt.colorbar(contour)  # Add a colorbar to a plot
 plt.contour(X/2/np.pi, Y/2/np.pi, Z, 50, colors='white', linewidths=0.2)  # Level contours in black
 plt.title('2D Color Map with Level Contour')
