@@ -8,7 +8,7 @@ f0 = 8  # in GHz
 d = 0.454
 p = 3
 w_flux_base = 2 * np.pi * 0.275
-flux_theta = 1.2*np.pi
+flux_theta = 0.25*2*np.pi
 target_avg_f = 7.15
 
 def flux_modulation(t, A_flux1, A_flux2, d):
@@ -17,8 +17,8 @@ def flux_modulation(t, A_flux1, A_flux2, d):
 
 # Sweep parameters
 A_flux_max = 0.35
-A_flux1_vals = np.linspace(0, A_flux_max, 30)
-A_flux2_vals = np.linspace(0, A_flux_max, 30)
+A_flux1_vals = np.linspace(0, A_flux_max, 10)
+A_flux2_vals = np.linspace(0, A_flux_max, 10)
 t_list = np.arange(0, 150, 0.02)
 
 # Compute avg_f for each combination of A_flux1 and A_flux2
@@ -48,18 +48,18 @@ for collection in contour.collections:
         contour_points.append(path.vertices)  # Store the x, y coordinates of the contour
 
 # Print the extracted contour points
-g_eff_list_1 = []
-g_eff_list_2 = []
+g_list = []
 for i, points in enumerate(contour_points):
     # print(f"Contour {i}:")
     # print(points)  # Each entry is an array of [A_flux1, A_flux2] points
     for point in points:
         A_flux1, A_flux2 = point
-        g_eff_list_1.append(calculate_geff(A_flux1, A_flux2, f0, d, p, w_flux_base, N= 2, phase = flux_theta))
-        g_eff_list_2.append(calculate_geff(A_flux1, A_flux2, f0, d, p, w_flux_base, N= -2, phase = flux_theta))
-
-axes[1].scatter(g_eff_list_1, g_eff_list_2)
-axes[1].plot(g_eff_list_1, g_eff_list_2)
+        g2 = calculate_geff(A_flux1, A_flux2, f0, d, p, w_flux_base, N= 2, phase = flux_theta)
+        gm2 = calculate_geff(A_flux1, A_flux2, f0, d, p, w_flux_base, N= -2, phase = flux_theta)
+        g_list.append((g2, gm2))
+        
+axes[1].scatter([g[0] for g in g_list], [g[1] for g in g_list])
+axes[1].plot([g[0] for g in g_list], [g[1] for g in g_list])
 axes[1].set_xlabel('geff N = 2')
 axes[1].set_ylabel('geff N = -2')
 axes[1].set_xlim([-0.5, 1.1])
