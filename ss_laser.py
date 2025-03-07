@@ -17,27 +17,28 @@ import scipy.sparse as sp
 ###########################################################################
 
 # Simulation parameters
-res_trunc = 200
-transmon_trunc = 3
+res_trunc = 120
+transmon_trunc = 4
 aux_trunc = 2
 dims = [res_trunc, transmon_trunc, aux_trunc]
 d_total = res_trunc*transmon_trunc*aux_trunc
 
 # System parameters
-fge = 6000
+fge = 6600
 alpha = -200
 faux = alpha + fge
 # wgf2 = (fge + faux)/2
-g_res = 8 # 10MHz
-g_aux = 11  # 30MHz
-omega_gf2 = 24  # 20MHz
-kappa_res = 0.2  # T1 = 100us
-kappa_aux = 138  # T1 = 300ns
+g_res = 11*0.5653  # 10MHz
+g_aux = 30*0.5535  # 30MHz
+omega_gf2 = 25  # 20MHz
+kappa_res = 0.01/2  # T1 = 100us
+kappa_aux = 3.33  # T1 = 300ns
+gamma_tr = 0.1  # T1 = 10us
 
 # Define Hamiltonian and losses
 trs =  transmon(f_ge = fge, alpha = alpha, g_ef = g_aux, g_ge = g_res, 
                        gamma_res = kappa_res, kappa = kappa_aux, n_ph = res_trunc, f_q = omega_gf2, 
-                       n_trunc = transmon_trunc, gamma_tr = 0)
+                       n_trunc = transmon_trunc, gamma_tr = gamma_tr)
 H = trs.build_H()
 c_ops = trs.build_C()
 H = qutip.Qobj(sp.csr_matrix(H.full(), dtype=complex))
@@ -51,11 +52,11 @@ execution_time = end_time - start_time
 print(f"Execution Time: {execution_time:.6f} seconds")
 
 array = final_state.full()
-reshaped_array = array.reshape((res_trunc, 3, 2, res_trunc, 3, 2))
+reshaped_array = array.reshape((res_trunc, transmon_trunc, 2, res_trunc, transmon_trunc, 2))
 reshaped_array = reshaped_array.reshape((d_total, d_total))
 
 # Convert back to Qobj
-final_state = qutip.Qobj(reshaped_array, dims=[[res_trunc, 3, 2], [res_trunc, 3, 2]])
+final_state = qutip.Qobj(reshaped_array, dims=[[res_trunc, transmon_trunc, 2], [res_trunc, transmon_trunc, 2]])
 
 # Plot results
 fig, ax = plt.subplots(1, 2, figsize = (7*0.9,5*0.9), constrained_layout=True)
@@ -67,6 +68,16 @@ for level in range(res_trunc):
                         qutip.qeye(aux_trunc)) 
     level_pop = (proj*final_state).tr()
     photon_distribution.append(level_pop)
+
+p_list = []
+for level in range(transmon_trunc): 
+    proj = qutip.tensor(qutip.qeye(res_trunc),
+                        qutip.basis(transmon_trunc, level)*qutip.basis(transmon_trunc, level).dag(),
+                        qutip.qeye(aux_trunc)) 
+    level_pop = (proj*final_state).tr()
+    p_list.append(level_pop)
+
+print("Qubit population: ", p_list)
 
 x = np.linspace(-10, 10, 251)
 p = np.linspace(-10, 10, 251)
