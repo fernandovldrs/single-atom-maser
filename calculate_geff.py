@@ -13,7 +13,7 @@ def calculate_geff(A_flux1, A_flux2, f0, d, p, w_flux_base, N=0, phase = 0):
     T = 2*np.pi/w_flux_base  # Total period
     f = lambda t: flux_modulation(t, A_flux1, A_flux2, d)
     num_coeffs = 30
-    coeffs, thetas = calc_fourier_series(f, T, num_coeffs, plot = True)
+    coeffs, thetas = calc_fourier_series(f, T, num_coeffs, plot = False)
     wq_k = [2*np.pi*c for c in coeffs]
 
     # Load selected geff combinations
@@ -39,11 +39,11 @@ def calculate_geff(A_flux1, A_flux2, f0, d, p, w_flux_base, N=0, phase = 0):
     return np.abs(g_eff)
 
 
-f0 = 8  # in GHz
-d = 0.454
-p = 3
-w_flux_base = 2 * np.pi * 0.275
-# Select A_flux1 and A_flux2 values
-A_flux1, A_flux2 = 0.1007, 0.1705  # Example value
-# A_flux1, A_flux2 = 0.1876, 0.0602  # Example value
-calculate_geff(A_flux1, A_flux2, f0, d, p, w_flux_base, N = 2, phase = 0)
+# f0 = 8  # in GHz
+# d = 0.454
+# p = 3
+# w_flux_base = 2 * np.pi * 0.275
+# # Select A_flux1 and A_flux2 values
+# A_flux1, A_flux2 = 0.1007, 0.1705  # Example value
+# # A_flux1, A_flux2 = 0.1876, 0.0602  # Example value
+# calculate_geff(A_flux1, A_flux2, f0, d, p, w_flux_base, N = 2, phase = 0)
