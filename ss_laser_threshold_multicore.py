@@ -6,6 +6,9 @@ import scipy.sparse as sp
 from multiprocessing import Pool
 import os
 
+import qutip.settings
+# qutip.settings.num_cpus = 1
+
 ###########################################################################
 ##                                                                       ##
 ## This script finds the steady-state solution of the laser dynamics as  ##
@@ -34,12 +37,12 @@ def run_simulation(omega_gf2):
         (0.3491, 0.2590), (0.3051, 0.2286), (0.2585, 0.1952), (0.2097, 0.1594),
         (0.1590, 0.1215), (0.1068, 0.0820), (0.0537, 0.0413)
     ]
-    g_indx = len(g_list)-1
-    folder_path = f"sol_{g_indx}"
+    g_indx = 45#len(g_list)-1-1-1-1-1
+    folder_path = f"sol_{g_indx}_highQ" 
     os.makedirs(folder_path, exist_ok=True)
     
     # Simulation parameters
-    res_trunc = 20
+    res_trunc = 200
     transmon_trunc = 4
     aux_trunc = 2
 
@@ -50,9 +53,11 @@ def run_simulation(omega_gf2):
     # wgf2 = (fge + faux)/2
     g_res = 11*g_list[g_indx][1]  # 10MHz
     g_aux = 30*g_list[g_indx][0] # 30MHz
+    print(g_list[g_indx][1], g_list[g_indx][0] )
     # omega_gf2 = 24*2  # 20MHz
-    kappa_res = 0.01*3  # T1 = 100us
+    kappa_res = 0.01  # T1 = 100us
     kappa_aux = 3.33  # T1 = 300ns
+    gamma_tr = 0.05 # T1 = 20us
 
     dims = [res_trunc, transmon_trunc, aux_trunc]
     d_total = res_trunc*transmon_trunc*aux_trunc
@@ -60,7 +65,7 @@ def run_simulation(omega_gf2):
     # Define Hamiltonian and losses
     trs =  transmon(f_ge = fge, alpha = alpha, g_ef = g_aux, g_ge = g_res, 
                         gamma_res = kappa_res, kappa = kappa_aux, n_ph = res_trunc, f_q = omega_gf2, 
-                        n_trunc = transmon_trunc, gamma_tr = 0)
+                        n_trunc = transmon_trunc, gamma_tr = gamma_tr)
     H = trs.build_H()
     c_ops = trs.build_C()
     H = qutip.Qobj(sp.csr_matrix(H.full(), dtype=complex))
@@ -83,7 +88,8 @@ def run_simulation(omega_gf2):
     proj = qutip.tensor(qutip.ket2dm(qutip.basis(res_trunc, res_trunc-1)),
                         qutip.qeye(transmon_trunc), qutip.qeye(2))
     pop = np.abs((final_state*proj).tr())
-    print(pop)
+    if pop > 0.03:
+        print(f"Consider increasing truncation (omega_gf2 = {omega_gf2})")
 
     filename = folder_path + f'/state_{omega_gf2:.0f}.npz'
 
@@ -94,9 +100,9 @@ def run_simulation(omega_gf2):
 
 if __name__ == "__main__":
 
-    omega_gf2_list = np.linspace(0, 24, 24)
+    omega_gf2_list = [59]#np.linspace(1, 12*6-1, 12*3)[17:]
 
-    pool = Pool(processes=12)  # Adjust the number of processes based on your CPU
+    pool = Pool(processes=1, maxtasksperchild=1)  # Adjust the number of processes based on your CPU
     results = pool.map(run_simulation, omega_gf2_list)
     pool.close()
     pool.join()
