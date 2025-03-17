@@ -3,6 +3,14 @@ import numpy as np
 from scipy.integrate import quad
 import matplotlib.pyplot as plt
 
+def detuned_drive(A, f0, phi, t0, length):
+    def envelope(t, args):
+        if t0<t<length+t0:
+            return A*np.exp(1j*(2*np.pi*f0*t +phi))
+        else:
+            return 0
+    return envelope
+
 def f_scale(flux, d):
     return np.sqrt(np.abs(np.cos(np.pi * flux) * np.sqrt(1 + d**2 * np.tan(np.pi * flux)**2)))
 
@@ -115,6 +123,69 @@ def create_qutip_initial_state(res_trunc, aux_trunc, transmon_trunc):
     return qutip.tensor(qutip.basis(res_trunc, 0), 
                                 qutip.basis(aux_trunc, 0), 
                                 qutip.basis(transmon_trunc, 0))
+
+class transmon_simple:
+    
+    def __init__(self, f_ge = 6e3*2*np.pi, alpha = -200*2*np.pi, n_trunc = 4):
+
+        self.n_trunc = n_trunc # transmon trunc
+        Ec = -2*np.pi*alpha
+        Ej = (2*np.pi*f_ge + Ec)**2/8/Ec
+
+        ### Hamiltonian in the charge basis
+        N = 7
+        H_charge = 4 * Ec * np.diag((np.arange(-N,N+1))**2) 
+        H_flux = 0.5 * Ej * (np.diag(-np.ones(2*N), 1) + np.diag(-np.ones(2*N), -1))
+        H_tr = qutip.Qobj(H_charge + H_flux)
+        
+        E = H_tr.eigenenergies()
+        H_tr_eig = H_tr.eigenstates()[1]
+        
+        ### Hamiltonian diagonalized in the eigenbasis
+        H_tr_diag = H_tr.transform(H_tr_eig)
+        H_tr_diag_offset = H_tr_diag-E[0]
+        
+        n_ch = qutip.Qobj(np.diag(np.arange(-N,N+1))) # charge operator
+        n_full = n_ch.transform(H_tr_eig) # charge operator in eigenbasis
+
+        ### Truncate transmon Hamiltonian and charge operator
+        H_tr = qutip.Qobj(H_tr_diag_offset.tidyup(atol=1e-3)[:self.n_trunc,:self.n_trunc])
+        n = n_full[:self.n_trunc,:self.n_trunc]
+        n = np.where(np.abs(n) < 1e-6, 0, n)
+        
+        self.H_tr = H_tr
+        self.n = n
+
+
+class transmon_charge:
+    
+    def __init__(self, f_max = 6e3, alpha = -200, d = 0, flux = 0, N = 7):
+        # This Hamiltonian already assumes the irrotational constraint, so there is no need for
+        # explicit mention of the flux derivative.
+
+        varphi = 2*np.pi*flux
+        Ec = -2*np.pi*alpha
+        EJ = (2*np.pi*f_max + Ec)**2/8/Ec
+        # EJ1 = EJ*(1+d)/2
+        # EJ2 = EJ*(1-d)/2
+        EJ_eff = EJ*np.sqrt(np.cos(varphi/2)**2 + d**2*np.sin(varphi/2)**2)
+        varphi_eff = np.arctan(d*np.tan(varphi/2))
+        
+        ### Hamiltonian in the charge basis
+        # Wallraff's group uses N = 15
+        H_charge = 4 * Ec * np.diag((np.arange(-N,N+1))**2) 
+        H_flux = EJ_eff * 0.5 * (np.diag(-np.ones(2*N), 1)*np.exp(-1j*varphi_eff) +
+                                 np.diag(-np.ones(2*N), -1)*np.exp(1j*varphi_eff))
+        
+        self.H_tr = qutip.Qobj(H_charge + H_flux)
+        self.n = qutip.Qobj(np.diag(np.arange(-N, N+1)))
+        
+    def get_eigenbasis(self):
+
+        ## Transform to eigenbasis
+        # E = H_tr.eigenenergies()
+        H_tr_eig = self.H_tr.eigenstates()[1]
+        return H_tr_eig
 
 class transmon:
     
