@@ -2,11 +2,9 @@ import qutip
 import matplotlib.pyplot as plt
 import numpy as np
 import time
-from helpers import *
-import scipy.sparse as sp
+from helpers import transmon_charge
 from multiprocessing import Pool
 import time
-from scipy.optimize import curve_fit
 
 ###########################################################################
 ##                                                                       ##

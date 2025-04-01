@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from qutip import wigner
 import time
-from helpers import *
+from helpers import transmon
 import scipy.sparse as sp
 
 ###########################################################################
@@ -17,7 +17,7 @@ import scipy.sparse as sp
 ###########################################################################
 
 # Simulation parameters
-res_trunc = 120
+res_trunc = 20
 transmon_trunc = 4
 aux_trunc = 2
 dims = [res_trunc, transmon_trunc, aux_trunc]
