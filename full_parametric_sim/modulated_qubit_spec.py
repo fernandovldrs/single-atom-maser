@@ -2,7 +2,7 @@ import qutip
 import matplotlib.pyplot as plt
 import numpy as np
 import time
-from helper_fns import *
+from helpers import *
 import scipy.sparse as sp
 from multiprocessing import Pool
 import time

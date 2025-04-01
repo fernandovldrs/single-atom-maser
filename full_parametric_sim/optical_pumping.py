@@ -2,7 +2,7 @@ import qutip
 import matplotlib.pyplot as plt
 import numpy as np
 import time
-from helper_fns import *
+from helpers import *
 import scipy.sparse as sp
 from multiprocessing import Pool
 import time
@@ -29,7 +29,7 @@ w_flux_base = 2 * np.pi * 0.275
 flux_theta = 0.25*2*np.pi
 A_flux1 = 0.332
 A_flux2 = 0.0
-flux_modulation_len = 160
+flux_modulation_len = 960
 flux_modulation_t0 = 0 
 flux_modulation_ramp_std = 10
 
@@ -37,7 +37,7 @@ flux_modulation_ramp_std = 10
 N = 7 # Charge operator cutoff
 # n = qutip.Qobj(np.diag(np.arange(-N, N+1))) # Charge operator
 omega_drive = 0.050*2*np.pi
-# freq_drive = 7.048405 # 7.151453 
+freq_drive = 7.06867 # 7.151453 
 phi_drive = 0
 drive_ramp_std = 5
 drive_t0 = 20
@@ -58,7 +58,7 @@ cob_matrix = ref_transmon.H_tr.eigenstates()[1]
 H_offset =  ref_transmon.H_tr.eigenenergies()[0]
 
 meas_basis = [qutip.basis(transmon_trunc, n) for n in range(transmon_trunc)]
-proj_list = [qutip.ket2dm(state) for state in meas_basis] # Projector operators onto g, e and f
+proj_list = [qutip.ket2dm(state) for state in meas_basis[:6]] # Projector operators onto g, e and f
 
 n_ch = qutip.Qobj(np.diag(np.arange(-N,N+1))) # charge operator
 n_full = n_ch.transform(cob_matrix) # charge operator in eigenbasis
@@ -71,6 +71,10 @@ for i in range(transmon_trunc):
             n_r[i][j] = 0
             n_l[j][i] = 0
 n = qutip.Qobj(np.where(np.abs(n) < 1e-6, 0, n))
+
+# Change to the rotating frame of the drive
+f_rot = freq_drive
+H_rot = qutip.Qobj(np.diag(np.arange(transmon_trunc)))*2*np.pi*f_rot
 
 def flux_modulation(t, A_flux1, A_flux2):
     A = flux_modulation_t0
@@ -112,13 +116,11 @@ def H_analog(t, *args):
     return H
 
 def H_drive(t, *args):
-    freq_drive = args[0]["sweep_param"]
-    # Change to the rotating frame of the drive
-    f_rot = freq_drive
+    drive_len = args[0]["drive_len"]
 
     A = drive_t0
     B = drive_ramp_std
-    C = 64# drive_len
+    C = drive_len
 
     if A < t < 2*B + A:
         V = omega_drive*np.cos(2*np.pi*freq_drive*t + phi_drive)
@@ -135,50 +137,47 @@ def H_drive(t, *args):
         return 0
 
 def H_total(t, *args):
-    freq_drive = args[0]["sweep_param"]
-    # Change to the rotating frame of the drive
-    f_rot = freq_drive
-    H_rot = qutip.Qobj(np.diag(np.arange(transmon_trunc)))*2*np.pi*f_rot
 
     U_rot = qutip.tensor((1j*H_rot*t).expm(), qutip.qeye(rr_trunc))
     # n_rot = U_rot*n*U_rot.dag()
     H = qutip.tensor(H_analog(t, *args) + H_drive(t, *args) - H_rot, qutip.qeye(rr_trunc)) + H_resonator(t, *args)
     return U_rot*(H)*U_rot.dag()
 
-def run_simulation(sweep_param):
+def run_simulation(drive_len):
     initial_state = qutip.tensor(meas_basis[0], qutip.basis(rr_trunc, 0))
-    t_list = np.arange(0, 200, 0.1)
+    t_list = np.arange(0, 1000, 0.1)
 
     start_time = time.time()  # Start timer
     c_ops = [np.sqrt(kappa)*qutip.tensor(qutip.qeye(transmon_trunc), qutip.destroy(rr_trunc))]
-    args = {"sweep_param": sweep_param}
-    # result = qutip.mesolve(H_total, initial_state, t_list, c_ops = c_ops, args = args)
-    result = qutip.mesolve(H_total, initial_state, t_list, args = args)
+    args = {"drive_len": drive_len}
+    result = qutip.mesolve(H_total, initial_state, t_list, c_ops = c_ops, args = args)
     final_state = result.states[-1].ptrace(0)
-    pop_list = []
-    for level in range(transmon_trunc):
-        pop_list.append(np.real((proj_list[level]*final_state).tr()))
+    pop0 = np.real((proj_list[0]*final_state).tr())
+    pop1 = np.real((proj_list[1]*final_state).tr())
+    pop2 = np.real((proj_list[2]*final_state).tr())
+    pop3 = np.real((proj_list[3]*final_state).tr())
+    pop4 = np.real((proj_list[4]*final_state).tr())
     print(f"Elapsed time: {time.time() - start_time:.6f} seconds")
 
-    return np.array(pop_list)
+    return np.array([pop0, pop1, pop2, pop3, pop4])
 
 if __name__ == "__main__":
-
-    drive_freq_list = np.linspace(7.069-0.01, 7.069+0.01, 16*4)
-
+    drive_len_list = np.linspace(0, 4*16 + 800, 16*10)
+    # omega_drive_list = 2*np.pi*np.linspace(0.02, 0.10, 5)
     pool = Pool(processes=16, maxtasksperchild=1)  # Adjust the number of processes based on your CPU
-    results = pool.map(run_simulation, drive_freq_list)
+    results = pool.map(run_simulation, drive_len_list)
     pool.close()
     pool.join()
 
-    pop_list = np.array(results)
+    power_rabi = np.array(results)
+    plt.plot(drive_len_list, power_rabi[:, 0], label = '0')
+    plt.plot(drive_len_list, power_rabi[:, 1], label = '1')
+    plt.plot(drive_len_list, power_rabi[:, 2], label = '2')
+    plt.plot(drive_len_list, power_rabi[:, 3], label = '3')
+    plt.plot(drive_len_list, power_rabi[:, 4], label = '4')
 
-    plt.scatter(drive_freq_list, pop_list[:, 0])
-    # plt.scatter(flux_modulation_list/2/np.pi, pop_list[:, 1])
-    # plt.scatter(flux_modulation_list, pop_list[:, 2])
     plt.grid()
-
     plt.ylabel("Ground state population")
-    plt.xlabel("Frequency")
+    plt.xlabel("Time")
+    plt.legend()
     plt.show()
-

@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from qutip import wigner
 import time
-from helper_fns import *
+from helpers import *
 import scipy.sparse as sp
 
 ###########################################################################

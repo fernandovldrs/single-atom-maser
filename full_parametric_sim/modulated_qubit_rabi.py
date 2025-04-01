@@ -2,7 +2,7 @@ import qutip
 import matplotlib.pyplot as plt
 import numpy as np
 import time
-from helper_fns import *
+from helpers import *
 import scipy.sparse as sp
 from multiprocessing import Pool
 import time
@@ -29,7 +29,7 @@ w_flux_base = 2 * np.pi * 0.275
 flux_theta = 0.25*2*np.pi
 A_flux1 = 0.332
 A_flux2 = 0.0
-flux_modulation_len = 960
+flux_modulation_len = 160+200
 flux_modulation_t0 = 0 
 flux_modulation_ramp_std = 10
 
@@ -37,16 +37,10 @@ flux_modulation_ramp_std = 10
 N = 7 # Charge operator cutoff
 # n = qutip.Qobj(np.diag(np.arange(-N, N+1))) # Charge operator
 omega_drive = 0.050*2*np.pi
-freq_drive = 7.06867 # 7.151453 
+freq_drive = 7.048405 #7.151453 #7.048405
 phi_drive = 0
 drive_ramp_std = 5
 drive_t0 = 20
-
-# Define readout resonator
-rr_trunc = 2
-rr_freq = 6.945357 + 2*0.275# frequency
-g_res = 0.030 # Coupling factor in GHz
-kappa = 1/200 # Decay
 
 # Define qubit measurement at a reference flux point
 flux_meas = 0
@@ -63,13 +57,6 @@ proj_list = [qutip.ket2dm(state) for state in meas_basis[:6]] # Projector operat
 n_ch = qutip.Qobj(np.diag(np.arange(-N,N+1))) # charge operator
 n_full = n_ch.transform(cob_matrix) # charge operator in eigenbasis
 n = n_full[:transmon_trunc,:transmon_trunc]
-n_r = np.copy(n) # ladder operator with upper triangule only
-n_l = np.copy(n) # ladder operator with lower triangule only
-for i in range(transmon_trunc):
-    for j in range(transmon_trunc):
-        if i>j:
-            n_r[i][j] = 0
-            n_l[j][i] = 0
 n = qutip.Qobj(np.where(np.abs(n) < 1e-6, 0, n))
 
 # Change to the rotating frame of the drive
@@ -93,15 +80,6 @@ def flux_modulation(t, A_flux1, A_flux2):
         return flux
     else:
         return 0
-
-
-def H_resonator(t, *args):
-    # Resonator interaction picture
-    a = qutip.destroy(rr_trunc)
-    U_rot = (1j*2*np.pi*rr_freq*a.dag()*a*t).expm()
-    a = U_rot*a*U_rot.dag()
-    # return qutip.tensor(qutip.qeye(2*N+1), 2*np.pi*rr_freq*a.dag()*a) +  2*np.pi*g_res*qutip.tensor(n, a.dag() - a)
-    return 2*np.pi*g_res*(  qutip.tensor(qutip.Qobj(n_r), a.dag()) + qutip.tensor(qutip.Qobj(n_l), a) ) 
 
 def H_analog(t, *args):
     # Find instantaneous flux point
@@ -138,31 +116,34 @@ def H_drive(t, *args):
 
 def H_total(t, *args):
 
-    U_rot = qutip.tensor((1j*H_rot*t).expm(), qutip.qeye(rr_trunc))
+    U_rot = (1j*H_rot*t).expm()
     # n_rot = U_rot*n*U_rot.dag()
-    H = qutip.tensor(H_analog(t, *args) + H_drive(t, *args) - H_rot, qutip.qeye(rr_trunc)) + H_resonator(t, *args)
-    return U_rot*(H)*U_rot.dag()
+
+    return U_rot*(H_analog(t, *args) + H_drive(t, *args) - H_rot)*U_rot.dag()
 
 def run_simulation(drive_len):
-    initial_state = qutip.tensor(meas_basis[0], qutip.basis(rr_trunc, 0))
-    t_list = np.arange(0, 1000, 0.1)
+    initial_state = meas_basis[0]
+    t_list = np.arange(0, 200+200, 0.5)
 
     start_time = time.time()  # Start timer
-    c_ops = [np.sqrt(kappa)*qutip.tensor(qutip.qeye(transmon_trunc), qutip.destroy(rr_trunc))]
     args = {"drive_len": drive_len}
-    result = qutip.mesolve(H_total, initial_state, t_list, c_ops = c_ops, args = args)
-    final_state = result.states[-1].ptrace(0)
-    pop0 = np.real((proj_list[0]*final_state).tr())
-    pop1 = np.real((proj_list[1]*final_state).tr())
-    pop2 = np.real((proj_list[2]*final_state).tr())
-    pop3 = np.real((proj_list[3]*final_state).tr())
-    pop4 = np.real((proj_list[4]*final_state).tr())
+    result = qutip.mesolve(H_total, initial_state, t_list, args = args)
+    final_state = result.states[-1]
+    pop0 = np.real((proj_list[0]*final_state*final_state.dag()).tr())
+    pop1 = np.real((proj_list[1]*final_state*final_state.dag()).tr())
+    pop2 = np.real((proj_list[2]*final_state*final_state.dag()).tr())
+    pop3 = np.real((proj_list[3]*final_state*final_state.dag()).tr())
+    pop4 = np.real((proj_list[4]*final_state*final_state.dag()).tr())
     print(f"Elapsed time: {time.time() - start_time:.6f} seconds")
 
     return np.array([pop0, pop1, pop2, pop3, pop4])
+    # pop0 = np.real((proj_list[0]*final_state*final_state.dag()).tr())
+    # print(f"Elapsed time: {time.time() - start_time:.6f} seconds")
+
+    # return pop0
 
 if __name__ == "__main__":
-    drive_len_list = np.linspace(0, 4*16 + 800, 16*10)
+    drive_len_list = np.arange(0, 4*16 + 4*16*3, 4)
     # omega_drive_list = 2*np.pi*np.linspace(0.02, 0.10, 5)
     pool = Pool(processes=16, maxtasksperchild=1)  # Adjust the number of processes based on your CPU
     results = pool.map(run_simulation, drive_len_list)
@@ -181,3 +162,35 @@ if __name__ == "__main__":
     plt.xlabel("Time")
     plt.legend()
     plt.show()
+
+    # drive_len_list = np.arange(0, 4*16, 4)
+    # # omega_drive_list = 2*np.pi*np.linspace(0.02, 0.10, 5)
+    # pool = Pool(processes=16, maxtasksperchild=1)  # Adjust the number of processes based on your CPU
+    # results = pool.map(run_simulation, drive_len_list)
+    # pool.close()
+    # pool.join()
+
+    # def cosine_func(t, A, f, offset, theta):
+    #     return A * np.cos(2 * np.pi * f * t + theta) + offset
+    # bounds = ([0.0, 0, 0.3, 0], [0.5, 0.15*2*np.pi, 0.7, 2*np.pi])
+
+    # power_rabi = results
+
+    # A_guess = (np.max(power_rabi) - np.min(power_rabi)) / 2
+    # offset_guess = (np.max(power_rabi) + np.min(power_rabi)) / 2
+    # f_guess = 0.0378 #omega_drive/2/np.pi/1.3
+    # theta_guess = (1-0.07)*2*np.pi
+    # p0 = [A_guess, f_guess, offset_guess, theta_guess]
+
+    # popt, _ = curve_fit(cosine_func, drive_len_list, power_rabi, bounds=bounds, p0=p0)
+    # A_fit, f_fit, offset_fit, theta_fit = popt
+    # # Plot the data
+    # line, = plt.plot(drive_len_list, power_rabi, label=f'f = {f_fit:.4f}')
+    # fit_curve = cosine_func(np.array(drive_len_list), *popt)
+    # plt.plot(drive_len_list, fit_curve, '--', color=line.get_color())
+
+    # plt.grid()
+    # plt.ylabel("Ground state population")
+    # plt.xlabel("Time")
+    # plt.legend()
+    # plt.show()
