@@ -23,11 +23,11 @@ alpha = 0.2
 
 # Define flux modulation parameters
 p = 3
-w_flux_base = 2 * np.pi * 0.275
+# w_flux_base = 2 * np.pi * 0.275
 flux_theta = 0.25*2*np.pi
 A_flux1 = 0.332
 A_flux2 = 0.0
-flux_modulation_len = 180 + 500
+flux_modulation_len = 180 + 250
 flux_modulation_t0 = 0 
 flux_modulation_ramp_std = 10
 
@@ -35,31 +35,19 @@ flux_modulation_ramp_std = 10
 N = 7 # Operator cutoff
 n = qutip.Qobj(np.diag(np.arange(-N, N+1))) # Charge operator
 omega_drive = 0.00
-# freq_drive = 7.15
+freq_drive = 7.15
 phi_drive = 0
 drive_ramp_std = 5
 drive_len = 110
 drive_t0 = 20
 
-# Define the digitalization of the flux curve and Hamiltonian
-flux_digit_list = np.linspace(0, 0.5, 10001)
-transmon_list = [transmon_charge(f_max = f0, alpha = -alpha, d = d, flux = flux, N = N) 
-                 for flux in flux_digit_list]
-frequency_digit_list = np.array([f0*f_scale(flux, d) for flux in flux_digit_list])
-H_digit_list = [transm.H_tr for transm in transmon_list]
-
-# Complete the flux curve
-frequency_digit_list = np.concatenate((frequency_digit_list, np.flip(frequency_digit_list)[1:]))
-H_digit_list = H_digit_list + H_digit_list[-2::-1]
-flux_digit_list = np.linspace(0, 1., len(frequency_digit_list))
-
 # Define qubit measurement at a given flux point
 flux_meas = 0
-flux_meas_indx = np.argmin(np.abs(np.mod(flux_digit_list-flux_meas, 1)))
-meas_basis = transmon_list[flux_meas_indx].get_eigenbasis()
+meas_basis = transmon_charge(f_max = f0, alpha = -alpha, d = d, flux = flux_meas, N = N).get_eigenbasis()
 proj_list = [qutip.ket2dm(state) for state in meas_basis[:3]] # Projector operators onto g, e and f
 
-def flux_modulation(t, A_flux1, A_flux2):
+
+def flux_modulation(t, A_flux1, A_flux2, w_flux_base):
     A = flux_modulation_t0
     B = flux_modulation_ramp_std
     C = flux_modulation_len
@@ -82,14 +70,12 @@ def flux_modulation(t, A_flux1, A_flux2):
 # plt.show()
 
 def H_analog(t, *args):
+    w_flux_base = args[0]["sweep_param"]
     # Find instantaneous flux point
-    flux = flux_modulation(t, A_flux1, A_flux2)
-    # Digitalize the flux
-    flux_digit_indx = np.argmin(np.abs(np.mod(flux_digit_list-flux, 1)))
-    # Retrieve Hamiltonian at that point
-    H = H_digit_list[flux_digit_indx]
+    flux = flux_modulation(t, A_flux1, A_flux2, w_flux_base)
+    H = transmon_charge(f_max = f0, alpha = -alpha, d = d, flux = flux, N = N).H_tr
     return H  
-  
+
 def H_drive_envelope(t, freq_drive):
 
     A = drive_t0
@@ -113,7 +99,7 @@ def H_drive_envelope(t, freq_drive):
 def H_drive(t, *args):
     # omega_drive = args[0]["omega_drive"]
     # drive_len = args[0]["drive_len"]
-    freq_drive = args[0]["freq_drive"]
+    # freq_drive = args[0]["sweep_param"]
 
     A = drive_t0
     B = drive_ramp_std
@@ -137,11 +123,11 @@ def H_total(t, *args):
     return H_analog(t, *args) + H_drive(t, *args)
 
 
-def run_simulation(freq_drive):
+def run_simulation(sweep_param):
     initial_state = meas_basis[0]
-    t_list = np.arange(0, 500+250, 0.001)
+    t_list = np.arange(0, 250 + 250, 0.002)
     start_time = time.time()  # Start timer
-    args = {"freq_drive" : freq_drive}
+    args = {"sweep_param" : sweep_param}
     result = qutip.mesolve(H_total, initial_state, t_list, args = args)
     final_state = result.states[-1]
     pop0 = (proj_list[0]*final_state*final_state.dag()).tr()
@@ -152,24 +138,18 @@ def run_simulation(freq_drive):
 
 if __name__ == "__main__":
 
-    t_list = np.arange(0, 500 + 250, 0.001)
-    plt.plot(t_list, [flux_modulation(t, A_flux1, A_flux2) for t in t_list])
-    plt.show()
-    plt.plot(t_list, [H_drive_envelope(t, 7.15) for t in t_list])
-    plt.show()
-    print("a")
-    freq_drive_list = np.linspace(7.15 - 0.03, 7.15 + 0.03, 12)
+    flux_modulation_list = 2*np.pi*np.linspace(50, 428*4, 16*16)/1000
 
-    pool = Pool(processes=12, maxtasksperchild=1)  # Adjust the number of processes based on your CPU
-    results = pool.map(run_simulation, freq_drive_list)
+    pool = Pool(processes=16, maxtasksperchild=1)  # Adjust the number of processes based on your CPU
+    results = pool.map(run_simulation, flux_modulation_list)
     pool.close()
     pool.join()
 
     pop_list = np.array(results)
 
-    plt.scatter(freq_drive_list, pop_list[:, 0])
-    plt.scatter(freq_drive_list, pop_list[:, 1])
-    plt.scatter(freq_drive_list, pop_list[:, 2])
+    plt.scatter(flux_modulation_list/2/np.pi, pop_list[:, 0])
+    # plt.scatter(flux_modulation_list/2/np.pi, pop_list[:, 1])
+    # plt.scatter(flux_modulation_list, pop_list[:, 2])
     plt.grid()
 
     plt.ylabel("Ground state population")
