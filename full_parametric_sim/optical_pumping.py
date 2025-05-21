@@ -113,6 +113,7 @@ def H_analog(t, *args):
 
     return H
 
+
 def H_drive(t, *args):
     drive_len = args[0]["drive_len"]
 
@@ -121,18 +122,22 @@ def H_drive(t, *args):
     C = drive_len
 
     if A < t < 2*B + A:
-        V = omega_drive*np.cos(2*np.pi*freq_drive*t + phi_drive)
-        V *= np.exp(-(t-(2*B + A))**2/2/B**2)
-        return V*n
+        Vl = omega_drive*np.exp(-1j*2*np.pi*freq_drive*t + phi_drive)
+        Vr = omega_drive*np.exp(1j*2*np.pi*freq_drive*t + phi_drive)
+        Vl *= np.exp(-(t-(2*B + A))**2/2/B**2)
+        Vr *= np.exp(-(t-(2*B + A))**2/2/B**2)
     elif 2*B + A <= t <= C + 2*B + A:
-        V = omega_drive*np.cos(2*np.pi*freq_drive*t + phi_drive)
-        return V*n
+        Vl = omega_drive*np.exp(-1j*2*np.pi*freq_drive*t + phi_drive)
+        Vr = omega_drive*np.exp(1j*2*np.pi*freq_drive*t + phi_drive)
     elif C + 2*B + A <= t <= C + 4*B + A:
-        V = omega_drive*np.cos(2*np.pi*freq_drive*t + phi_drive)
-        V *= np.exp(-(t-(C + 2*B + A))**2/2/B**2)
-        return V*n
+        Vl = omega_drive*np.exp(-1j*2*np.pi*freq_drive*t + phi_drive)
+        Vr = omega_drive*np.exp(1j*2*np.pi*freq_drive*t + phi_drive)
+        Vl *= np.exp(-(t-(C + 2*B + A))**2/2/B**2)
+        Vr *= np.exp(-(t-(C + 2*B + A))**2/2/B**2)
     else:
-        return 0
+        Vl = 0
+        Vr = 0
+    return Vr*n_r + Vl*n_l
 
 def H_total(t, *args):
 
