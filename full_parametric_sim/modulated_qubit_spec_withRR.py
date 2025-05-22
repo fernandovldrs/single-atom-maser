@@ -2,7 +2,7 @@ import qutip
 import matplotlib.pyplot as plt
 import numpy as np
 import time
-from helpers import transmon_charge
+from helpers import transmon_charge, gaussian_ramp_envelope
 import scipy.sparse as sp
 from multiprocessing import Pool
 import time
@@ -19,95 +19,106 @@ from scipy.optimize import curve_fit
 
 t_list = np.arange(0, 200, 0.1)
 
-# Define frequency curve parameters
-f0 = 8  # in GHz
-d = 0.454
-alpha = 0.2
+# Define transmon parameters
+transmon_params = {
+    "f0": 8.0, # GHz
+    "d": 0.454, # SQUID asymmetry
+    "alpha": 0.2, # - anharmonicity, GHz
+    "N": 7, # Charge offset truncation
+    "trunc": 9, # transmon Hamiltonian truncation
+    "meas_flux": 0, # flux of measurement basis
+}
 
-# Define flux modulation parameters
+# Define flux drive
 p = 3
-w_flux_base = 2 * np.pi * 0.275
-flux_theta = 0.25*2*np.pi
-A_flux1 = 0.332
-A_flux2 = 0.0
-flux_modulation_len = 160
-flux_modulation_t0 = 0 
-flux_modulation_ramp_std = 10
+flux_mod_params = {
+    "As": (0.332, 0.0),
+    "freqs": (0.275, p*0.275), # GHz
+    "phases": (0.0, 0.25), # rad/(2pi) 
+}
+flux_pulse_params = {
+    "t0": 0,
+    "pulse_len": 160,
+    "ramp_std": 10,
+    "ramp_chop": 2,
+}
 
-# Define drive properties
-N = 7 # Charge operator cutoff
-# n = qutip.Qobj(np.diag(np.arange(-N, N+1))) # Charge operator
-omega_drive = 0.025*2*np.pi
-# freq_drive = 7.048405 # 7.151453 
-phi_drive = 0
-drive_ramp_std = 5
-drive_t0 = 20
-drive_len = 64*2
+# Define charge drive
+drive_mod_params = {
+    "A": 0.025, # GHz
+    "freq": 7.048405, # GHz 
+}
+drive_pulse_params = {
+    "t0": 20,
+    "pulse_len": 2*64,
+    "ramp_std": 5,
+    "ramp_chop": 2,
+}
 
 # Define readout resonator
-rr_trunc = 2
-rr_freq = 6.945357 + 2*0.275# frequency
-g_res = 0.030*0 # Coupling factor in GHz
-kappa = 1/200 # Decay
+rr_params = {
+    "freq": 6.945357 + 2*0.275, # GHz
+    "trunc": 2,
+    "g": 0.030*0, # coupling, GHz
+    "kappa": 1/200, # GHz
+}
+
+# Transmon Hamiltonian generator
+def transmon(flux, f0, alpha, d, N, **kwargs):
+    return transmon_charge(f_max = f0, alpha = -alpha, d = d, flux = flux, N = N)
 
 # Define qubit measurement at a reference flux point
-flux_meas = 0
-ref_transmon = transmon_charge(f_max = f0, alpha = -alpha, d = d, flux = flux_meas, N = N)
-
-# Find the change-of-basis matrix to the reference flux point and define post-COB dimension cutoff
-transmon_trunc = 9 # Reduce from 2*N+1 dimensions to transmon_trunc
-cob_matrix = ref_transmon.H_tr.eigenstates()[1]
-H_offset =  ref_transmon.H_tr.eigenenergies()[0]
-
+transmon_trunc = transmon_params["trunc"] 
+ref_transmon = transmon(transmon_params["meas_flux"], **transmon_params)
 meas_basis = [qutip.basis(transmon_trunc, n) for n in range(transmon_trunc)]
-proj_list = [qutip.ket2dm(state) for state in meas_basis] # Projector operators onto g, e and f
+proj_list = [qutip.ket2dm(state) for state in meas_basis] # Projector operators
 
-n_ch = qutip.Qobj(np.diag(np.arange(-N,N+1))) # charge operator
+# Find the change-of-basis matrix to the reference flux point and reduce dimension post-COB
+cob_matrix = ref_transmon.H_tr.eigenstates()[1]
+
+# Calculate charge operators
+n_ch = qutip.Qobj(np.diag(np.arange(-transmon_params["N"], transmon_params["N"]+1))) # charge operator
 n_full = n_ch.transform(cob_matrix) # charge operator in eigenbasis
 n = n_full[:transmon_trunc,:transmon_trunc]
-n_r = np.copy(n) # ladder operator with upper triangule only
-n_l = np.copy(n) # ladder operator with lower triangule only
+nr = np.copy(n) # ladder operator with upper triangule only
+nl = np.copy(n) # ladder operator with lower triangule only
 for i in range(transmon_trunc):
     for j in range(transmon_trunc):
         if i>j:
-            n_r[i][j] = 0
-            n_l[j][i] = 0
+            nr[i][j] = 0
+            nl[j][i] = 0
 n = qutip.Qobj(np.where(np.abs(n) < 1e-6, 0, n))
-n_l = qutip.Qobj(np.where(np.abs(n_l) < 1e-6, 0, n_l))
-n_r = qutip.Qobj(np.where(np.abs(n_r) < 1e-6, 0, n_r))
+nl = qutip.Qobj(np.where(np.abs(nl) < 1e-6, 0, nl))
+nr = qutip.Qobj(np.where(np.abs(nr) < 1e-6, 0, nr))
 
-def flux_modulation(t, A_flux1, A_flux2):
-    A = flux_modulation_t0
-    B = flux_modulation_ramp_std
-    C = flux_modulation_len
+# RR operators
+a = qutip.destroy(rr_params["trunc"])
+rr_qeye = qutip.qeye(rr_params["trunc"])
+rr_v0 = qutip.basis(rr_params["trunc"], 0)
 
-    if A < t < 2*B + A:
-        flux = A_flux1 * np.cos(w_flux_base * t) + A_flux2 * np.cos(w_flux_base * p * t + flux_theta)
-        flux *= np.exp(-(t-(2*B + A))**2/2/B**2)
-        return flux
-    elif 2*B + A <= t <= C + 2*B + A:
-        return A_flux1 * np.cos(w_flux_base * t) + A_flux2 * np.cos(w_flux_base * p * t + flux_theta)
-    elif C + 2*B + A <= t <= C + 4*B + A:
-        flux = A_flux1 * np.cos(w_flux_base * t) + A_flux2 * np.cos(w_flux_base * p * t + flux_theta)
-        flux *= np.exp(-(t-(C + 2*B + A))**2/2/B**2)
-        return flux
-    else:
-        return 0
+# Offset Hamiltonian to be removed
+H_offset =  ref_transmon.H_tr.eigenenergies()[0]
 
+def flux_modulation(t, mod_params, pulse_params):
+    flux_mod = sum([A*np.cos(2*np.pi*(freq*t + theta)) 
+                     for A, freq, theta in zip(mod_params["As"], mod_params["freqs"], mod_params["phases"])])
+    env = gaussian_ramp_envelope(**pulse_params)
+    return  env(t) * flux_mod
 
 def H_resonator(t, *args):
     # Resonator interaction picture
-    a = qutip.destroy(rr_trunc)
-    U_rot = (1j*2*np.pi*rr_freq*a.dag()*a*t).expm()
-    a = U_rot*a*U_rot.dag()
-    # return qutip.tensor(qutip.qeye(2*N+1), 2*np.pi*rr_freq*a.dag()*a) +  2*np.pi*g_res*qutip.tensor(n, a.dag() - a)
-    return 2*np.pi*g_res*(  qutip.tensor(qutip.Qobj(n_r), a.dag()) + qutip.tensor(qutip.Qobj(n_l), a) ) 
-
-def H_analog(t, *args):
-    # Find instantaneous flux point
-    flux = flux_modulation(t, A_flux1, A_flux2)
-    H = transmon_charge(f_max = f0, alpha = -alpha, d = d, flux = flux, N = N).H_tr
     
+    U_rot = (1j*2*np.pi*rr_params["freq"]*a.dag()*a*t).expm()
+    at = U_rot*a*U_rot.dag()
+
+    return 2*np.pi*rr_params["g"]*(qutip.tensor(nr, at.dag()) + qutip.tensor(nl, at) ) 
+
+def H_transmon(t, *args):
+
+    # Find instantaneous flux point
+    flux = flux_modulation(t, flux_mod_params, flux_pulse_params)
+    H = transmon(flux, **transmon_params).H_tr
+
     # Change hamiltonian to reference basis
     H_tr_diag = H.transform(cob_matrix)
     H_tr_diag_offset = H_tr_diag-H_offset
@@ -115,114 +126,82 @@ def H_analog(t, *args):
 
     return H
 
-def H_drive(t, *args):
-    freq_drive = args[0]["sweep_param"]
-    
-    A = drive_t0
-    B = drive_ramp_std
-    C = drive_len
+def H_drive(t, mod_params, pulse_params, *args):
 
-    if A < t < 2*B + A:
-        # V = omega_drive*np.cos(2*np.pi*freq_drive*t + phi_drive)
-        Vl = omega_drive*np.exp(-1j*2*np.pi*freq_drive*t + phi_drive)
-        Vr = omega_drive*np.exp(1j*2*np.pi*freq_drive*t + phi_drive)
-        Vl *= np.exp(-(t-(2*B + A))**2/2/B**2)
-        Vr *= np.exp(-(t-(2*B + A))**2/2/B**2)
-    elif 2*B + A <= t <= C + 2*B + A:
-        Vl = omega_drive*np.exp(-1j*2*np.pi*freq_drive*t + phi_drive)
-        Vr = omega_drive*np.exp(1j*2*np.pi*freq_drive*t + phi_drive)
-    elif C + 2*B + A <= t <= C + 4*B + A:
-        Vl = omega_drive*np.exp(-1j*2*np.pi*freq_drive*t + phi_drive)
-        Vr = omega_drive*np.exp(1j*2*np.pi*freq_drive*t + phi_drive)
-        Vl *= np.exp(-(t-(C + 2*B + A))**2/2/B**2)
-        Vr *= np.exp(-(t-(C + 2*B + A))**2/2/B**2)
-    else:
-        Vl = 0
-        Vr = 0
-    return Vr*n_r + Vl*n_l
+    mod_params_new = mod_params.copy() # Copy dictionary to set drive_len_value
+    mod_params_new["freq"] = args[0]["sweep_param"]
 
-def drive_envelope(t, freq_drive):
-    ## Just for plotting purposes
+    Vl = 2*np.pi*mod_params_new["A"]*np.exp(-1j*2*np.pi*mod_params_new["freq"]*t)
+    Vr = np.conj(Vl)
+    drive_mod = Vr*nr + Vl*nl
+    env = gaussian_ramp_envelope(**pulse_params)
 
-    A = drive_t0
-    B = drive_ramp_std
-    C = drive_len
-
-    if A < t < 2*B + A:
-        Vr = omega_drive*np.exp(1j*2*np.pi*freq_drive*t + phi_drive)
-        Vr *= np.exp(-(t-(2*B + A))**2/2/B**2)
-    elif 2*B + A <= t <= C + 2*B + A:
-        Vr = omega_drive*np.exp(1j*2*np.pi*freq_drive*t + phi_drive)
-    elif C + 2*B + A <= t <= C + 4*B + A:
-        Vr = omega_drive*np.exp(1j*2*np.pi*freq_drive*t + phi_drive)
-        Vr *= np.exp(-(t-(C + 2*B + A))**2/2/B**2)
-    else:
-        Vr = 0
-    return np.abs(Vr)
+    return env(t)*drive_mod
 
 def H_total(t, *args):
+
     freq_drive = args[0]["sweep_param"]
+
     # Change to the rotating frame of the drive
     f_rot = freq_drive
     H_rot = qutip.Qobj(np.diag(np.arange(transmon_trunc)))*2*np.pi*f_rot
 
-    U_rot = qutip.tensor((1j*H_rot*t).expm(), qutip.qeye(rr_trunc))
-    # n_rot = U_rot*n*U_rot.dag()
-    H = qutip.tensor(H_analog(t, *args) + H_drive(t, *args) - H_rot, qutip.qeye(rr_trunc)) + H_resonator(t, *args)
+    U_rot = qutip.tensor((1j*H_rot*t).expm(), rr_qeye)
+    H_transmonspace = H_transmon(t, *args) + H_drive(t, drive_mod_params, drive_pulse_params, *args) - H_rot
+    H = qutip.tensor(H_transmonspace, rr_qeye) + H_resonator(t, *args)
+
     return U_rot*(H)*U_rot.dag()
 
 def run_simulation(sweep_param):
-    initial_state = qutip.tensor(meas_basis[0], qutip.basis(rr_trunc, 0))
 
+    initial_state = qutip.tensor(meas_basis[0], rr_v0)
     start_time = time.time()  # Start timer
-    c_ops = []# [np.sqrt(kappa)*qutip.tensor(qutip.qeye(transmon_trunc), qutip.destroy(rr_trunc))]
-    args = {"sweep_param": sweep_param}
-    # result = qutip.mesolve(H_total, initial_state, t_list, c_ops = c_ops, args = args)
-    result = qutip.mesolve(H_total, initial_state, t_list, args = args)
-    final_state = result.states[-1].ptrace(0)
-    pop_list = []
-    for level in range(transmon_trunc):
-        pop_list.append(np.real((proj_list[level]*final_state).tr()))
+
+    c_ops = []# [np.sqrt(rr_params["kappa"])*qutip.tensor(qutip.qeye(transmon_trunc), a)]
+    result = qutip.mesolve(H_total, initial_state, t_list, c_ops = c_ops, args = {"sweep_param": sweep_param})
+
     print(f"Elapsed time: {time.time() - start_time:.6f} seconds")
 
-    return np.array(pop_list)
+    return result.states
 
 if __name__ == "__main__":
 
     # drive_freq_list = np.linspace(7.151453-0.03, 7.151453+0.03, 16*4)
-    drive_freq_list = np.linspace(7.045-0.05+0.1, 7.045+0.05+0.1, 16*6)
+    drive_freq_list = np.linspace(7.045-0.02, 7.045+0.02, 16*4)
 
     pool = Pool(processes=16, maxtasksperchild=1)  # Adjust the number of processes based on your CPU
     results = pool.map(run_simulation, drive_freq_list)
     pool.close()
     pool.join()
 
-    pop_list = np.array(results)
+    states = np.array(results)
     
     # Create figure with gridspec for side-by-side layout
     fig = plt.figure(figsize=(14, 6))
-    gs = fig.add_gridspec(2, 2, width_ratios=[3, 2])
+    gs = fig.add_gridspec(2, 2, width_ratios=[2, 3])
 
     # Flux modulation plot
     ax1 = fig.add_subplot(gs[0, 0])
-    ax1.plot(t_list, [flux_modulation(t, A_flux1, A_flux2) for t in t_list])
+    ax1.plot(t_list, [flux_modulation(t, flux_mod_params, flux_pulse_params) for t in t_list])
     ax1.set_ylabel("Flux modulation")
     ax1.grid()
 
-    # |Vr(t)| plot
+    # Drive envelope plot
+    env = gaussian_ramp_envelope(**drive_pulse_params)
     ax2 = fig.add_subplot(gs[1, 0])
-    ax2.plot(t_list, [drive_envelope(t, np.max(drive_freq_list)) for t in t_list])
+    ax2.plot(t_list, [env(t) for t in t_list])
     ax2.set_ylabel("|Vr(t)|")
     ax2.set_xlabel("Time")
     ax2.grid()
-
-    # Power Rabi populations
+        
+    # Transmon populations
     ax3 = fig.add_subplot(gs[:, 1])  # spans both rows
-    ax3.plot(drive_freq_list, pop_list[:, 0], label='0')
-    ax3.plot(drive_freq_list, pop_list[:, 1], label='1')
-    ax3.plot(drive_freq_list, pop_list[:, 2], label='2')
+    for level in range(3):
+        ax3.plot(drive_freq_list, 
+                 [np.real((proj_list[level]*s.ptrace(0)).tr()) for s in states[:, -1]],
+                 label=level)
     ax3.set_ylabel("Population")
-    ax3.set_xlabel("Drive Length")
+    ax3.set_xlabel("Drive frequency")
     ax3.legend()
     ax3.grid()
 
