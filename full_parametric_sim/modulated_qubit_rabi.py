@@ -15,7 +15,7 @@ import time
 ##                                                                       ##
 ###########################################################################
 
-t_list = np.arange(0, 200, 0.5)
+t_list = np.arange(0, 400, 0.5)
 
 # Define transmon parameters
 transmon_params = {
@@ -36,15 +36,15 @@ flux_mod_params = {
 }
 flux_pulse_params = {
     "t0": 0,
-    "pulse_len": 160,
+    "pulse_len": 160*2,
     "ramp_std": 10,
     "ramp_chop": 2,
 }
 
 # Define charge drive
 drive_mod_params = {
-    "A": 0.020, # GHz
-    "freq": 7.048405, # GHz 
+    "A": 0.010, # GHz
+    "freq": 7.048551, # GHz 
 }
 drive_pulse_params = {
     "t0": 20,
@@ -135,8 +135,7 @@ def run_simulation(drive_len):
 
 ### Execution and plotting
 if __name__ == "__main__":
-    drive_len_list = np.linspace(0, 4*16*2, 16*4)
-    # omega_drive_list = 2*np.pi*np.linspace(0.02, 0.10, 5)
+    drive_len_list = np.linspace(0, 300, 16*4)
     pool = Pool(processes=16, maxtasksperchild=1)  # Adjust the number of processes based on your CPU
     results = pool.map(run_simulation, drive_len_list)
     pool.close()
