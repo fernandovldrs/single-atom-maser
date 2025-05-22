@@ -61,7 +61,7 @@ def transmon(flux, f0, alpha, d, N, **kwargs):
 transmon_trunc = transmon_params["trunc"] 
 ref_transmon = transmon(transmon_params["meas_flux"], **transmon_params)
 meas_basis = [qutip.basis(transmon_trunc, n) for n in range(transmon_trunc)]
-proj_list = [qutip.ket2dm(state) for state in meas_basis[:6]] # Projector operators onto g, e and f
+proj_list = [qutip.ket2dm(state) for state in meas_basis] # Projector operators
 
 # Find the change-of-basis matrix to the reference flux point and reduce dimension post-COB
 cob_matrix = ref_transmon.H_tr.eigenstates()[1]
@@ -70,16 +70,16 @@ cob_matrix = ref_transmon.H_tr.eigenstates()[1]
 n_ch = qutip.Qobj(np.diag(np.arange(-transmon_params["N"], transmon_params["N"]+1))) 
 n_full = n_ch.transform(cob_matrix) # charge operator in eigenbasis
 n = n_full[:transmon_trunc,:transmon_trunc]
-n_r = np.copy(n) # ladder operator with upper triangule only
-n_l = np.copy(n) # ladder operator with lower triangule only
+nr = np.copy(n) # ladder operator with upper triangule only
+nl = np.copy(n) # ladder operator with lower triangule only
 for i in range(transmon_trunc):
     for j in range(transmon_trunc):
         if i>j:
-            n_r[i][j] = 0
-            n_l[j][i] = 0
+            nr[i][j] = 0
+            nl[j][i] = 0
 n = qutip.Qobj(np.where(np.abs(n) < 1e-6, 0, n))
-nl = qutip.Qobj(np.where(np.abs(n_l) < 1e-6, 0, n_l))
-nr = qutip.Qobj(np.where(np.abs(n_r) < 1e-6, 0, n_r))
+nl = qutip.Qobj(np.where(np.abs(nl) < 1e-6, 0, nl))
+nr = qutip.Qobj(np.where(np.abs(nr) < 1e-6, 0, nr))
 
 # Change to the rotating frame of the drive
 f_rot = drive_mod_params["freq"]
@@ -90,11 +90,11 @@ H_offset =  ref_transmon.H_tr.eigenenergies()[0]
 
 def flux_modulation(t, mod_params, pulse_params):
     flux_mod = sum([A*np.cos(2*np.pi*(freq*t + theta)) 
-                     for A, freq, theta in zip(mod_params["As"], mod_params["freqs"], mod_params["phases"])])
+                    for A, freq, theta in zip(mod_params["As"], mod_params["freqs"], mod_params["phases"])])
     env = gaussian_ramp_envelope(**pulse_params)
     return  env(t) * flux_mod
 
-def H_analog(t, *args):
+def H_transmon(t, *args):
 
     # Find instantaneous flux point
     flux = flux_modulation(t, flux_mod_params, flux_pulse_params)
@@ -119,10 +119,9 @@ def H_drive(t, mod_params, pulse_params, *args):
 
     return env(t)*drive_mod
 
-
 def H_total(t, *args):
     U_rot = (1j*H_rot*t).expm()
-    return U_rot*(H_analog(t, *args) + H_drive(t, drive_mod_params, drive_pulse_params, *args) - H_rot)*U_rot.dag()
+    return U_rot*(H_transmon(t, *args) + H_drive(t, drive_mod_params, drive_pulse_params, *args) - H_rot)*U_rot.dag()
 
 def run_simulation(drive_len):
     
@@ -147,7 +146,7 @@ if __name__ == "__main__":
         
     # Create figure with gridspec for side-by-side layout
     fig = plt.figure(figsize=(14, 6))
-    gs = fig.add_gridspec(2, 2, width_ratios=[3, 2])
+    gs = fig.add_gridspec(2, 2, width_ratios=[2, 3])
 
     # Flux modulation plot
     ax1 = fig.add_subplot(gs[0, 0])
