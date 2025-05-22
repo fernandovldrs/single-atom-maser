@@ -1,6 +1,24 @@
 import qutip
 import numpy as np
 
+
+    
+def gaussian_ramp_envelope(t0, pulse_len, ramp_std, ramp_chop, **kwargs):
+
+    def env(t):
+        A, B, C, k = t0, ramp_std, pulse_len, ramp_chop
+        
+        if A < t < k*B + A:
+            return np.exp(-(t-(k*B + A))**2/2/B**2)
+        elif 2*B + A <= t <= C + 2*B + A:
+            return 1.0
+        elif C + k*B + A <= t <= C + 2*k*B + A:
+            return np.exp(-(t-(C + k*B + A))**2/2/B**2)
+        else:
+            return 0
+        
+    return env
+
 class transmon_charge:
     
     def __init__(self, f_max = 6e3, alpha = -200, d = 0, flux = 0, N = 7):
