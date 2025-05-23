@@ -16,8 +16,8 @@ def flux_modulation(t, A_flux1, A_flux2, d):
 
 # Sweep parameters
 A_flux_max = 0.35
-A_flux1_vals = np.linspace(0, A_flux_max, 10)
-A_flux2_vals = np.linspace(0, A_flux_max, 10)
+A_flux1_vals = np.linspace(0, A_flux_max, 50)
+A_flux2_vals = np.linspace(0, A_flux_max, 50)
 t_list = np.arange(0, 150, 0.02)
 
 # Compute avg_f for each combination of A_flux1 and A_flux2
@@ -29,7 +29,7 @@ for i, A_flux1 in enumerate(A_flux1_vals):
 
 # Add a contour line at avg_f
 contour_levels = [target_avg_f]
-fig, axes = plt.subplots(1, 2)
+fig, axes = plt.subplots(1, 2, figsize = (7, 4*0.8))
 contour = axes[0].contour(A_flux1_vals, A_flux2_vals, avg_f_map, levels=contour_levels, colors='red', linewidths=2)
 
 # Plot the results
@@ -46,6 +46,8 @@ for level_segs in contour.allsegs:
         contour_points.append(seg)
 
 # Print the extracted contour points
+g2_scaling = 30
+gm2_scaling = 11
 g_list = []
 for i, points in enumerate(contour_points):
     # print(f"Contour {i}:")
@@ -54,14 +56,15 @@ for i, points in enumerate(contour_points):
         A_flux1, A_flux2 = point
         g2 = calculate_geff(A_flux1, A_flux2, f0, d, p, w_flux_base, N= 2, phase = flux_theta)
         gm2 = calculate_geff(A_flux1, A_flux2, f0, d, p, w_flux_base, N= -2, phase = flux_theta)
-        g_list.append((g2, gm2))
+        g_list.append((g2_scaling*g2, gm2_scaling*gm2))
         
 axes[1].scatter([g[0] for g in g_list], [g[1] for g in g_list])
 axes[1].plot([g[0] for g in g_list], [g[1] for g in g_list])
 axes[1].set_xlabel('geff N = 2')
 axes[1].set_ylabel('geff N = -2')
-axes[1].set_xlim([-0.5, 1.1])
-axes[1].set_ylim([-0.5, 1.1])
+axes[1].set_xlim([-0.1*g2_scaling, 0.8*g2_scaling])
+axes[1].set_ylim([-0.1*gm2_scaling, 0.7*gm2_scaling])
+axes[1].set_yticks([0, 3, 6])
 axes[1].set_title(f'Coupling scaling at avg_f = {target_avg_f:.2f}GHz')
 plt.grid()
 plt.show()
