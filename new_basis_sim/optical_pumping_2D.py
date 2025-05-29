@@ -63,7 +63,7 @@ rr_params = {
     "freq": 0, # (f_avg-alpha) + 2*flux_params["freqs"][0], # This is changed later, GHz
     "trunc": 2,
     "g": 0.030, # coupling, GHz
-    "kappa": 1/30, # GHz
+    "kappa": 1/60, # GHz
 }
 
 
