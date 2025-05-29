@@ -17,13 +17,13 @@ import time
 
 
 # Define frequency curve parameters
-f_avg = 7.2  # in GHz
+f_avg = 7.148  # in GHz
 alpha = 0.2
 
 # Define drive properties
 N = 7 # Charge operator cutoff
 # n = qutip.Qobj(np.diag(np.arange(-N, N+1))) # Charge operator
-omega_drive = 0.015*2*np.pi
+omega_drive = 0.0127*2*np.pi/1.49376662
 freq_drive = - alpha/2 # At the GF/2 point, qubit rotation frame
 phi_drive = 0
 drive_ramp_std = 5
@@ -31,8 +31,8 @@ drive_t0 = 20
 
 # Define readout resonator
 rr_trunc = 3
-g_res = 0.015*0 # Coupling factor in GHz
-kappa = 1/25 # Decay
+g_res = 0.01658/1.49376662 # Coupling factor in GHz
+kappa = 1/30 # Decay
 
 # Define qubit
 ref_transmon = transmon_charge(f_max = f_avg, alpha = -alpha, N = N)
@@ -103,14 +103,16 @@ def H_drive(t, *args):
         Vr = 0
     return Vr*n_r + Vl*n_l
 
+# print(H_drive(0, *{"drive_len":}))
+print(n_r)
 def H_total(t, *args):
     return qutip.tensor(H_transmon + H_drive(t, *args), qutip.qeye(rr_trunc)) + H_resonator
 
 initial_state = qutip.tensor(meas_basis[0], qutip.basis(rr_trunc, 0))
 t_list = np.arange(0, 3064, 1)
 start_time = time.time()  # Start timer
-c_ops = []#[np.sqrt(kappa)*qutip.tensor(qutip.qeye(transmon_trunc), qutip.destroy(rr_trunc))]
-args = {"drive_len": 2500}
+c_ops = [np.sqrt(kappa)*qutip.tensor(qutip.qeye(transmon_trunc), qutip.destroy(rr_trunc))]
+args = {"drive_len": 3000}
 result = qutip.mesolve(H_total, initial_state, t_list, c_ops = c_ops, args = args)
 
 pop0 = [np.real((proj_list[0]*state.ptrace(0)).tr()) for state in result.states]
