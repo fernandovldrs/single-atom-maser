@@ -91,8 +91,8 @@ def run_simulation(sweep_param):
     # Preliminary calculations for drive Hamiltonian
     s01 = qutip.basis(3, 0)*qutip.basis(3, 1).dag()
     s12 = qutip.basis(3, 1)*qutip.basis(3, 2).dag()
-    delta_01 = drive_params_new["freq"] - f_avg
-    delta_12 = drive_params_new["freq"] - (f_avg - alpha) 
+    delta_01 = 2*np.pi*(drive_params_new["freq"] - f_avg)
+    delta_12 = 2*np.pi*(drive_params_new["freq"] - (f_avg - alpha))
     g_scaling = g0
     drive_env = gaussian_ramp_envelope(**drive_pulse_params)
 
@@ -105,8 +105,8 @@ def run_simulation(sweep_param):
 
     # Preliminary calculations for coupling Hamiltonian
     a = qutip.destroy(rr_params_new["trunc"])
-    delta_01_rr = rr_params_new["freq"] - f_avg
-    delta_12_rr = rr_params_new["freq"] - (f_avg - alpha) 
+    delta_01_rr = 2*np.pi*(rr_params_new["freq"] - f_avg)
+    delta_12_rr = 2*np.pi*(rr_params_new["freq"] - (f_avg - alpha)) 
     g_scaling = g2
 
     def H_coupling(t, *args):
@@ -114,8 +114,8 @@ def run_simulation(sweep_param):
         # pulse_params_new["pulse_len"] = args[0]["sweep_param"]
         coupling_op = g_scaling*(np.exp(1j*delta_01_rr*t)*lambda01*s01 + np.exp(1j*delta_12_rr*t)*np.sqrt(2)*lambda12*s12)
         coupling_op = qutip.tensor(coupling_op, a.dag())
-        H = 2*np.pi*rr_params_new["g"]*coupling_op*np.exp(-1j*2*min(flux_params_new["freqs"])*t)
-
+        H = 2*np.pi*rr_params_new["g"]*coupling_op*np.exp(-1j*2*2*np.pi*min(flux_params_new["freqs"])*t)
+        
         return H + H.dag()
 
     def H_total(t, *args):

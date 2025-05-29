@@ -28,10 +28,10 @@ transmon_params = {
     "alpha": 0.2, # - anharmonicity, GHz
 } #GF/2 = 7.048551, GE= 7.15175
 
-f_avg, alpha, lambda01, lambda12 = calc_average_transmon(transmon_params, flux_params)
+f_avg, alpha, lambda01, lambda12, xi = calc_average_transmon(transmon_params, flux_params)
 
 drive_params = {
-    "A": 0.010, # GHz
+    "A": 0.040, # GHz
     "freq": f_avg-alpha/2, # GHz 
 }
 drive_pulse_params = {
@@ -45,9 +45,9 @@ drive_pulse_params = {
 # Preliminary calculations for drive Hamiltonian
 s01 = qutip.basis(3, 0)*qutip.basis(3, 1).dag()
 s12 = qutip.basis(3, 1)*qutip.basis(3, 2).dag()
-delta_01 = drive_params["freq"] - f_avg
-delta_12 = drive_params["freq"] - (f_avg - alpha) 
-g_eff = calculate_geff(transmon_params, flux_params, N=0)
+delta_01 = 2*np.pi*(drive_params["freq"] - f_avg)
+delta_12 = 2*np.pi*(drive_params["freq"] - (f_avg - alpha))
+g_eff = calculate_geff(transmon_params, flux_params, Ns = [0])[0]
 drive_env = gaussian_ramp_envelope(**drive_pulse_params)
 
 def H_drive(t, *args):
