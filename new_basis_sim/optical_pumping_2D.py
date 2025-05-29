@@ -43,7 +43,7 @@ for contour_indx in range(contour_number + 1):
 g_scaling_list = np.array(g_scaling_lists).reshape(-1)
 As_list = np.array(As_lists).reshape(-1)
 g_scaling_list = [tuple(g_scaling_list[i:i+3]) for i in range(0, len(g_scaling_list), 3)][:30:-1]
-As_list = [tuple(As_list[i:i+2]) for i in range(0, len(As_list), 2)][::-1]
+As_list = [tuple(As_list[i:i+2]) for i in range(0, len(As_list), 2)][:30:-1]
 # print(g_scaling_list[:30])
 # print(g_scaling_list)
 
@@ -63,7 +63,7 @@ rr_params = {
     "freq": 0, # (f_avg-alpha) + 2*flux_params["freqs"][0], # This is changed later, GHz
     "trunc": 2,
     "g": 0.030, # coupling, GHz
-    "kappa": 1/60, # GHz
+    "kappa": 1/25, # GHz
 }
 
 
@@ -79,7 +79,7 @@ def run_simulation(sweep_param):
     flux_params_new = flux_params.copy()
     flux_params_new["As"] = (A_flux1, A_flux2)
 
-    f_avg, alpha, lambda01, lambda12 = calc_average_transmon(transmon_params, flux_params_new)
+    f_avg, alpha, lambda01, lambda12, _ = calc_average_transmon(transmon_params, flux_params_new)
     
     drive_params_new = drive_params.copy()
     drive_params_new["A"] = drive_A
@@ -122,37 +122,121 @@ def run_simulation(sweep_param):
         return qutip.tensor(H_drive(t, *args), qutip.qeye(rr_params_new["trunc"])) + H_coupling(t, *args)
 
     initial_state = qutip.tensor(qutip.basis(3, 0), qutip.basis(rr_params_new["trunc"], 0))
-    t_list = np.arange(0, 5000, 1)
+    t_list = np.arange(0, 1000, 1)
     c_ops = [np.sqrt(rr_params_new["kappa"])*qutip.tensor(qutip.qeye(3), qutip.destroy(rr_params_new["trunc"]))]
 
     start_time = time.time()  # Start timer
     result = qutip.mesolve(H_total, initial_state, t_list, c_ops = c_ops, args = {})
     print(f"Elapsed time: {time.time() - start_time:.6f} seconds")
 
-    pop1 = [np.real((qutip.ket2dm(qutip.basis(3, 1))*state.ptrace(0)).tr()) for state in result.states]
-    return pop1[-1]
-    # return result.states
+    pop1 = [np.real((qutip.ket2dm(qutip.basis(3, 1))*state.ptrace(0)).tr())
+            for state in result.states]
+    pop_res = [np.real((qutip.ket2dm(qutip.basis(rr_params_new["trunc"], 1))*state.ptrace(1)).tr())
+               for state in result.states]
+    return pop1[-1], pop_res[-1]
 
+Generate data
 if __name__ == "__main__":
-
-    drive_A_list = np.linspace(0.001, 0.080, 40)
+    drive_A_list = np.linspace(0.001, 0.040, 2)
     g_index_list = range(len(g_scaling_list))
 
     param_grid = list(itertools.product(drive_A_list, g_index_list))
-    pool = Pool(processes=12, maxtasksperchild=1)  # Adjust the number of processes based on your CPU
-    results = pool.map(run_simulation, param_grid)
-    pool.close()
-    pool.join()
 
-    pop1_grid = np.array(results).reshape(len(drive_A_list), len(g_index_list))
+    # Adjust number of processes if needed
+    with Pool(processes=12, maxtasksperchild=1) as pool:
+        results = pool.map(run_simulation, param_grid)
 
-    # Plot the 2D map
-    plt.figure(figsize=(6, 5))
-    extent = [g_index_list[0], g_index_list[-1], drive_A_list[0], drive_A_list[-1]]
-    plt.imshow(pop1_grid, origin='lower', extent=extent, aspect='auto', cmap='viridis')
-    plt.colorbar(label='Final |1⟩ population')
-    plt.xlabel('g_res (GHz)')
-    plt.ylabel('omega_drive (GHz)')
-    plt.title('Population of |1⟩ vs omega_drive and g_res')
+    # Separate pop1 and pop_res from results
+    pop1_vals = []
+    pop_res_vals = []
+
+    for r in results:
+        if isinstance(r, tuple):
+            pop1_vals.append(r[0])
+            pop_res_vals.append(r[1])
+        else:
+            raise ValueError("Simulation must return a tuple (pop1, pop_res)")
+
+    # Reshape data
+    pop1_grid = np.array(pop1_vals).reshape(
+        len(drive_A_list), len(g_index_list))
+    pop_res_grid = np.array(pop_res_vals).reshape(
+        len(drive_A_list), len(g_index_list))
+
+    # Save data
+    np.savez("parametric_sweep_results.npz",
+             drive_A_list=drive_A_list,
+             g_index_list=g_index_list,
+             pop1_grid=pop1_grid,
+             pop_res_grid=pop_res_grid)
+
+    # Find max pop1 locations per g_res (along omega_drive axis)
+    pop1_max_indices = np.argmax(pop1_grid, axis=0)
+    drive_A_max = [drive_A_list[i] for i in pop1_max_indices]
+
+    # Plot
+    fig, axs = plt.subplots(1, 2, figsize=(12, 5))
+
+    # Plot pop1 grid
+    im1 = axs[0].imshow(pop1_grid, origin='lower', extent=[
+        g_index_list[0], g_index_list[-1], drive_A_list[0], drive_A_list[-1]
+    ], aspect='auto', cmap='viridis')
+    axs[0].scatter(g_index_list, drive_A_max, c='r', s=30, label='Max |1⟩')
+    axs[0].set_title("Final |1⟩ population")
+    axs[0].set_xlabel("g_res (GHz)")
+    axs[0].set_ylabel("omega_drive (GHz)")
+    axs[0].legend()
+    fig.colorbar(im1, ax=axs[0], label="|1⟩ population")
+
+    # Plot resonator population
+    im2 = axs[1].imshow(pop_res_grid, origin='lower', extent=[
+        g_index_list[0], g_index_list[-1], drive_A_list[0], drive_A_list[-1]
+    ], aspect='auto', cmap='magma')
+    axs[1].set_title("Final resonator population")
+    axs[1].set_xlabel("g_res (GHz)")
+    axs[1].set_ylabel("omega_drive (GHz)")
+    fig.colorbar(im2, ax=axs[1], label="Resonator population")
+
     plt.tight_layout()
     plt.show()
+
+
+# # Read data
+# if __name__ == "__main__":
+#     # Load data from npz file
+#     data = np.load("parametric_sweep_results.npz")
+
+#     drive_A_list = data["drive_A_list"]
+#     g_index_list = data["g_index_list"]
+#     pop1_grid = data["pop1_grid"]
+#     pop_res_grid = data["pop_res_grid"]
+
+#     # Find max pop1 locations per g_res (along omega_drive axis)
+#     pop1_max_indices = np.argmax(pop1_grid, axis=0)
+#     drive_A_max = [drive_A_list[i] for i in pop1_max_indices]
+
+#     # Plot
+#     fig, axs = plt.subplots(1, 2, figsize=(12, 5))
+
+#     # Plot pop1 grid
+#     im1 = axs[0].imshow(pop1_grid, origin='lower', extent=[
+#         g_index_list[0], g_index_list[-1], drive_A_list[0], drive_A_list[-1]
+#     ], aspect='auto', cmap='viridis')
+#     axs[0].scatter(g_index_list, drive_A_max, c='r', s=30, label='Max |1⟩')
+#     axs[0].set_title("Final |1⟩ population")
+#     axs[0].set_xlabel("g_res (GHz)")
+#     axs[0].set_ylabel("omega_drive (GHz)")
+#     axs[0].legend()
+#     fig.colorbar(im1, ax=axs[0], label="|1⟩ population")
+
+#     # Plot resonator population
+#     im2 = axs[1].imshow(pop_res_grid, origin='lower', extent=[
+#         g_index_list[0], g_index_list[-1], drive_A_list[0], drive_A_list[-1]
+#     ], aspect='auto', cmap='magma')
+#     axs[1].set_title("Final resonator population")
+#     axs[1].set_xlabel("g_res (GHz)")
+#     axs[1].set_ylabel("omega_drive (GHz)")
+#     fig.colorbar(im2, ax=axs[1], label="Resonator population")
+
+#     plt.tight_layout()
+#     plt.show()
