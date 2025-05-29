@@ -129,7 +129,7 @@ if __name__ == "__main__":
 
     param_grid = list(itertools.product(omega_drive_list, g_res_list))
     # omega_drive_list = 2*np.pi*np.linspace(0.02, 0.10, 5)
-    pool = Pool(processes=16, maxtasksperchild=1)  # Adjust the number of processes based on your CPU
+    pool = Pool(processes=12, maxtasksperchild=1)  # Adjust the number of processes based on your CPU
     results = pool.map(run_sim, param_grid)
     pool.close()
     pool.join()
