@@ -204,8 +204,9 @@ def calc_average_transmon(transmon_params, flux_params):
     alpha_avg = np.average([transm.alpha(flux_modulation(t)) for t in T_list])
     lambda01_avg = np.average([transm.lambda01(flux_modulation(t)) for t in T_list])
     lambda12_avg = np.average([transm.lambda12(flux_modulation(t)) for t in T_list])
+    xi_avg = np.average([transm.xi(flux_modulation(t)) for t in T_list])
 
-    return f_avg, alpha_avg, lambda01_avg, lambda12_avg
+    return f_avg, alpha_avg, lambda01_avg, lambda12_avg, xi_avg
     
 
 def calc_fourier_series(f, T, N, plot = False):
