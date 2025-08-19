@@ -3,3 +3,4 @@ __pycache__/
 *.pyo
 *.zip
 venv311/*
+data/
