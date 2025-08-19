@@ -17,7 +17,7 @@ import scipy.sparse as sp
 ###########################################################################
 
 # Simulation parameters
-res_trunc = 20
+res_trunc = 90
 transmon_trunc = 4
 aux_trunc = 2
 dims = [res_trunc, transmon_trunc, aux_trunc]

@@ -21,6 +21,12 @@ for contour_indx in range(contour_number + 1):
     g_scaling_lists.append(data[f"g_scaling_{contour_indx}"])
     contour_points.append(data[f"As_{contour_indx}"])
 
+import matplotlib.pyplot as plt
+plt.scatter(g_scaling_lists[0][:,0], g_scaling_lists[0][:,2])
+i = 11
+print(g_scaling_lists[0][i,0], g_scaling_lists[0][i,1], g_scaling_lists[0][i,2])
+plt.scatter(g_scaling_lists[0][i,0], g_scaling_lists[0][i,2], c = 'r')
+plt.show()
 # Sanity check
 print("target_f_avg:", target_f_avg)
 print("Ns:", Ns)

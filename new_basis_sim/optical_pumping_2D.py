@@ -122,7 +122,7 @@ def run_simulation(sweep_param):
         return qutip.tensor(H_drive(t, *args), qutip.qeye(rr_params_new["trunc"])) + H_coupling(t, *args)
 
     initial_state = qutip.tensor(qutip.basis(3, 0), qutip.basis(rr_params_new["trunc"], 0))
-    t_list = np.arange(0, 1000, 1)
+    t_list = np.arange(0, 5000, 1)
     c_ops = [np.sqrt(rr_params_new["kappa"])*qutip.tensor(qutip.qeye(3), qutip.destroy(rr_params_new["trunc"]))]
 
     start_time = time.time()  # Start timer
@@ -135,81 +135,40 @@ def run_simulation(sweep_param):
                for state in result.states]
     return pop1[-1], pop_res[-1]
 
-Generate data
-if __name__ == "__main__":
-    drive_A_list = np.linspace(0.001, 0.040, 2)
-    g_index_list = range(len(g_scaling_list))
-
-    param_grid = list(itertools.product(drive_A_list, g_index_list))
-
-    # Adjust number of processes if needed
-    with Pool(processes=12, maxtasksperchild=1) as pool:
-        results = pool.map(run_simulation, param_grid)
-
-    # Separate pop1 and pop_res from results
-    pop1_vals = []
-    pop_res_vals = []
-
-    for r in results:
-        if isinstance(r, tuple):
-            pop1_vals.append(r[0])
-            pop_res_vals.append(r[1])
-        else:
-            raise ValueError("Simulation must return a tuple (pop1, pop_res)")
-
-    # Reshape data
-    pop1_grid = np.array(pop1_vals).reshape(
-        len(drive_A_list), len(g_index_list))
-    pop_res_grid = np.array(pop_res_vals).reshape(
-        len(drive_A_list), len(g_index_list))
-
-    # Save data
-    np.savez("parametric_sweep_results.npz",
-             drive_A_list=drive_A_list,
-             g_index_list=g_index_list,
-             pop1_grid=pop1_grid,
-             pop_res_grid=pop_res_grid)
-
-    # Find max pop1 locations per g_res (along omega_drive axis)
-    pop1_max_indices = np.argmax(pop1_grid, axis=0)
-    drive_A_max = [drive_A_list[i] for i in pop1_max_indices]
-
-    # Plot
-    fig, axs = plt.subplots(1, 2, figsize=(12, 5))
-
-    # Plot pop1 grid
-    im1 = axs[0].imshow(pop1_grid, origin='lower', extent=[
-        g_index_list[0], g_index_list[-1], drive_A_list[0], drive_A_list[-1]
-    ], aspect='auto', cmap='viridis')
-    axs[0].scatter(g_index_list, drive_A_max, c='r', s=30, label='Max |1⟩')
-    axs[0].set_title("Final |1⟩ population")
-    axs[0].set_xlabel("g_res (GHz)")
-    axs[0].set_ylabel("omega_drive (GHz)")
-    axs[0].legend()
-    fig.colorbar(im1, ax=axs[0], label="|1⟩ population")
-
-    # Plot resonator population
-    im2 = axs[1].imshow(pop_res_grid, origin='lower', extent=[
-        g_index_list[0], g_index_list[-1], drive_A_list[0], drive_A_list[-1]
-    ], aspect='auto', cmap='magma')
-    axs[1].set_title("Final resonator population")
-    axs[1].set_xlabel("g_res (GHz)")
-    axs[1].set_ylabel("omega_drive (GHz)")
-    fig.colorbar(im2, ax=axs[1], label="Resonator population")
-
-    plt.tight_layout()
-    plt.show()
-
-
-# # Read data
+# Generate data
 # if __name__ == "__main__":
-#     # Load data from npz file
-#     data = np.load("parametric_sweep_results.npz")
+#     drive_A_list = np.linspace(0.001, 0.060, 30)
+#     g_index_list = range(len(g_scaling_list))
 
-#     drive_A_list = data["drive_A_list"]
-#     g_index_list = data["g_index_list"]
-#     pop1_grid = data["pop1_grid"]
-#     pop_res_grid = data["pop_res_grid"]
+#     param_grid = list(itertools.product(drive_A_list, g_index_list))
+
+#     # Adjust number of processes if needed
+#     with Pool(processes=16, maxtasksperchild=1) as pool:
+#         results = pool.map(run_simulation, param_grid)
+
+#     # Separate pop1 and pop_res from results
+#     pop1_vals = []
+#     pop_res_vals = []
+
+#     for r in results:
+#         if isinstance(r, tuple):
+#             pop1_vals.append(r[0])
+#             pop_res_vals.append(r[1])
+#         else:
+#             raise ValueError("Simulation must return a tuple (pop1, pop_res)")
+
+#     # Reshape data
+#     pop1_grid = np.array(pop1_vals).reshape(
+#         len(drive_A_list), len(g_index_list))
+#     pop_res_grid = np.array(pop_res_vals).reshape(
+#         len(drive_A_list), len(g_index_list))
+
+#     # Save data
+#     np.savez("parametric_sweep_results.npz",
+#              drive_A_list=drive_A_list,
+#              g_index_list=g_index_list,
+#              pop1_grid=pop1_grid,
+#              pop_res_grid=pop_res_grid)
 
 #     # Find max pop1 locations per g_res (along omega_drive axis)
 #     pop1_max_indices = np.argmax(pop1_grid, axis=0)
@@ -240,3 +199,56 @@ if __name__ == "__main__":
 
 #     plt.tight_layout()
 #     plt.show()
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+if __name__ == "__main__":
+    # Load data
+    data = np.load("parametric_sweep_results_25ns.npz")
+    drive_A_list = data["drive_A_list"]
+    g_index_list = data["g_index_list"]
+    pop1_grid = data["pop1_grid"]
+
+    # Find max pop1 locations
+    pop1_max_indices = np.argmax(pop1_grid, axis=0)
+    drive_A_max = [drive_A_list[i] for i in pop1_max_indices]
+
+    # Plot
+    fig, axs = plt.subplots(1, 2, figsize=(8*0.7, 5*0.7), width_ratios=[2, 0.5], sharey = True)
+
+    # Plot 2D heatmap on the left
+    im = axs[0].imshow(pop1_grid, origin='lower', extent=[
+        g_index_list[0], g_index_list[-1], drive_A_list[0], drive_A_list[-1]
+    ], aspect='auto', cmap='viridis')
+    axs[0].scatter(g_index_list, drive_A_max, c='r', s=30, label='Max |e⟩')
+
+    # Replace only the x-axis tick labels
+    tick_indices = [10, 20, 30, 40]
+    tick_positions = tick_indices
+    tick_labels = [f"{30 * g_scaling_list[i][0]:.1f}" for i in tick_indices]
+
+    axs[0].set_xticks(tick_positions)
+    axs[0].set_xticklabels(tick_labels)
+
+    axs[0].set_title("Final |1⟩ population")
+    axs[0].set_xlabel("g_res (MHz)")
+    axs[0].set_ylabel("omega_drive (GHz)")
+    axs[0].legend()
+    # fig.colorbar(im, ax=axs[0], label="|1⟩ population")
+
+    # Plot vertical cut at column index 30 on the right
+    cut_index = 30
+    axs[0].plot([cut_index, cut_index], [drive_A_list[0], drive_A_list[-1]], linestyle = '--', color = "w")
+    axs[1].plot(pop1_grid[:, cut_index], drive_A_list)
+    axs[1].set_ylim(drive_A_list[0], drive_A_list[-1])
+    # axs[1].set_title(f"Vertical cut at g_res = {30 * g_scaling_list[cut_index][0]:.1f} MHz")
+    axs[1].set_xlabel("|e⟩ population")
+    axs[1].set_ylabel("omega_drive (GHz)")
+    axs[1].set_xlim([0.0, 1.0])
+    axs[1].set_ylabel("")          # Remove y-axis label
+    # axs[1].set_yticklabels([])
+
+    plt.tight_layout()
+    plt.show()
